@@ -1,0 +1,87 @@
+{
+  "_mock_scenario": "高覆盖场景：用户查询 '2025年中国生成式AI行业分析'，知识库充分支撑",
+  "query": "2025年中国生成式AI行业分析",
+  "results": [
+    {
+      "chunk_id": "doc_001_p15_3",
+      "content": "2025年中国生成式AI市场规模达到3200亿美元，同比增长28%，为历年最高增速。市场规模占全球AI总规模的约23%。",
+      "source": {
+        "doc_id": "doc_001",
+        "doc_name": "2025中国AI行业年度报告.pdf",
+        "page": 15,
+        "paragraph_id": "doc_001_p15_3",
+        "category": "行业报告"
+      },
+      "relevance_score": 0.94,
+      "highlight_spans": [[0, 25], [25, 42]]
+    },
+    {
+      "chunk_id": "doc_002_p8_1",
+      "content": "截至2025年Q4，生成式AI技术渗透率突破31%，C端用户规模达到4.5亿人。其中18-35岁用户占比达68%。",
+      "source": {
+        "doc_id": "doc_002",
+        "doc_name": "生成式AI应用普查2025.pdf",
+        "page": 8,
+        "paragraph_id": "doc_002_p8_1",
+        "category": "行业报告"
+      },
+      "relevance_score": 0.91,
+      "highlight_spans": [[11, 35]]
+    },
+    {
+      "chunk_id": "doc_003_p2_1",
+      "content": "2025年Q1生成式AI行业融资总额达580亿美元，龙头OpenAI估值突破3000亿美元。头部5家厂商市场份额合计达62%，行业集中度较2024年上升15个百分点。",
+      "source": {
+        "doc_id": "doc_003",
+        "doc_name": "AI产业资本流向季报Q1.pdf",
+        "page": 2,
+        "paragraph_id": "doc_003_p2_1",
+        "category": "行业报告"
+      },
+      "relevance_score": 0.88,
+      "highlight_spans": [[0, 28]]
+    },
+    {
+      "chunk_id": "doc_005_p12_4",
+      "content": "网信办于2025年3月发布《生成式人工智能服务管理办法》，明确提供者责任、数据合规要求、内容审核标准三大支柱。办法自2025年5月1日起施行。",
+      "source": {
+        "doc_id": "doc_005",
+        "doc_name": "生成式AI监管政策汇编.pdf",
+        "page": 12,
+        "paragraph_id": "doc_005_p12_4",
+        "category": "政策法规"
+      },
+      "relevance_score": 0.85,
+      "highlight_spans": [[11, 32]]
+    },
+    {
+      "chunk_id": "doc_007_p4_2",
+      "content": "垂直场景渗透率差异显著：教育领域渗透率45%，金融领域38%，医疗领域仅21%。医疗场景落地慢的原因包括数据隐私、临床验证周期长、责任认定复杂。",
+      "source": {
+        "doc_id": "doc_007",
+        "doc_name": "AI垂直行业应用深度报告.pdf",
+        "page": 4,
+        "paragraph_id": "doc_007_p4_2",
+        "category": "行业报告"
+      },
+      "relevance_score": 0.82,
+      "highlight_spans": [[0, 40]]
+    },
+    {
+      "chunk_id": "doc_009_p3_1",
+      "content": "AI数据中心2025年全国电力消耗占比达3.8%，较2023年的1.5%翻倍。单个千卡GPU集群年耗电量相当于1万户家庭，碳排放问题日益凸显。",
+      "source": {
+        "doc_id": "doc_009",
+        "doc_name": "AI可持续发展白皮书2025.pdf",
+        "page": 3,
+        "paragraph_id": "doc_009_p3_1",
+        "category": "行业报告"
+      },
+      "relevance_score": 0.79,
+      "highlight_spans": [[10, 35]]
+    }
+  ],
+  "coverage_assessment": "高",
+  "missing_topics": [],
+  "total_hits": 47
+}
