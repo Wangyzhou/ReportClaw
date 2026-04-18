@@ -1,0 +1,50 @@
+{
+  "_mock_scenario": "Reviewer 审查 Writer 输出后，发现 3 个问题的示例 response",
+  "_input_was": "writer-expected-output.md 但故意引入了 2 个错误做演示",
+  "verdict": "needs_revision",
+  "issues": [
+    {
+      "id": "issue_001",
+      "type": "citation_error",
+      "location": {
+        "section": "1.1 市场规模与增速",
+        "line_range": [3, 3],
+        "citation_id": "doc_001_p15_4"
+      },
+      "detail": "引用的 chunk_id=doc_001_p15_4 在 retrieval_results 中不存在。最接近的是 doc_001_p15_3（实际来源）。",
+      "severity": "HIGH",
+      "suggested_fix": "改引 doc_001_p15_3"
+    },
+    {
+      "id": "issue_002",
+      "type": "data_mismatch",
+      "location": {
+        "section": "三、垂直场景分化",
+        "line_range": [12, 12],
+        "citation_id": "doc_007_p4_2"
+      },
+      "detail": "报告陈述'医疗领域仅 18%'，但引用的 chunk doc_007_p4_2 原文为'医疗领域仅 21%'。数字不符。",
+      "severity": "HIGH",
+      "suggested_fix": "把 18% 改为 21%"
+    },
+    {
+      "id": "issue_003",
+      "type": "format",
+      "location": {
+        "section": "一、市场概览",
+        "line_range": [2, 2]
+      },
+      "detail": "章节标题后直接接二级章节，缺少一级章节的引导段落。",
+      "severity": "LOW",
+      "suggested_fix": "可选：在 '一、市场概览' 下加一段 1-2 句的章节引导语"
+    }
+  ],
+  "scores": {
+    "coverage_score": 0.85,
+    "quality_score": 0.78,
+    "citation_accuracy": 0.89
+  },
+  "retry_recommended": true,
+  "rounds_used": 1,
+  "_note": "HIGH 级 issue 有 2 个（issue_001 + issue_002），必须回环给 Writer 修。LOW 级 issue_003 记录不打回。"
+}

@@ -1,0 +1,29 @@
+{
+  "_mock_scenario": "低覆盖场景：用户查询的主题知识库支撑不足，需要主动报告 missing_topics",
+  "query": "2025年东南亚AI市场监管动态",
+  "results": [
+    {
+      "chunk_id": "doc_012_p7_2",
+      "content": "新加坡IMDA于2025年2月发布AI Governance Framework 2.0，侧重自动化风险评估和透明度披露。",
+      "source": {
+        "doc_id": "doc_012",
+        "doc_name": "亚太AI政策观察.pdf",
+        "page": 7,
+        "paragraph_id": "doc_012_p7_2",
+        "category": "政策法规"
+      },
+      "relevance_score": 0.72,
+      "highlight_spans": [[0, 20]]
+    }
+  ],
+  "coverage_assessment": "低",
+  "missing_topics": [
+    "印尼AI监管政策",
+    "泰国AI产业动态",
+    "越南AI市场数据",
+    "菲律宾AI应用情况",
+    "马来西亚AI监管"
+  ],
+  "total_hits": 3,
+  "_recommendation": "建议扩大 scope 或切换主题到'亚太AI监管'。触发 G2→G3 动态升级。"
+}
