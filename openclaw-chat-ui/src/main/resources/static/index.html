@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenClaw Stream Desk</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<div class="app-shell">
+    <aside class="rail rail-left">
+        <div class="brand-block">
+            <p class="brand-kicker">Stream Desk</p>
+            <h1>OpenClaw 对话台</h1>
+            <p class="brand-copy">实时文本、工具轨迹、命令输出，落在同一条会话流里。</p>
+        </div>
+
+        <img
+                class="rail-photo"
+                src="https://images.unsplash.com/photo-1495020689067-958852a7765e?auto=format&fit=crop&w=1200&q=80"
+                alt="新闻编辑台与屏幕"
+        >
+
+        <section class="status-band">
+            <div>
+                <p class="section-label">连接状态</p>
+                <strong id="connectionLabel">待命</strong>
+            </div>
+            <span id="connectionBadge" class="status-pill idle">未连接</span>
+        </section>
+
+        <section class="session-band">
+            <div class="section-head">
+                <div>
+                    <p class="section-label">会话</p>
+                    <strong>目标 Session</strong>
+                </div>
+                <button id="refreshSessionsButton" class="ghost-button" type="button">刷新</button>
+            </div>
+            <label class="field-label" for="sessionSelect">选择会话</label>
+            <select id="sessionSelect" class="session-select"></select>
+            <p id="sessionHint" class="session-hint">优先使用 main session，也可以切到具体群聊或私聊。</p>
+        </section>
+    </aside>
+
+    <main class="workspace">
+        <section class="conversation-stage">
+            <header class="conversation-head">
+                <div>
+                    <p class="section-label">流式对话</p>
+                    <h2>主对话窗口</h2>
+                </div>
+                <div id="runMarker" class="run-marker">尚未发送</div>
+            </header>
+
+            <div id="messages" class="messages" aria-live="polite">
+                <article class="message-row assistant intro">
+                    <div class="message-meta">
+                        <span class="message-role">Assistant</span>
+                        <span class="message-time">现在</span>
+                    </div>
+                    <div class="message-bubble">
+                        <p>从这里发问题，工具调用、命令输出和生命周期事件会内联在对话流里。</p>
+                    </div>
+                </article>
+            </div>
+
+            <form id="chatForm" class="composer">
+                <label class="sr-only" for="messageInput">输入消息</label>
+                <textarea id="messageInput" name="message" rows="3" placeholder="例如：帮我检索鹿晗关晓彤相关舆情"></textarea>
+                <div class="composer-bar">
+                    <p class="composer-tip">Enter 发送，Shift + Enter 换行</p>
+                    <button id="sendButton" class="send-button" type="submit">发送</button>
+                </div>
+            </form>
+        </section>
+    </main>
+</div>
+
+<script src="/app.js" defer></script>
+</body>
+</html>
