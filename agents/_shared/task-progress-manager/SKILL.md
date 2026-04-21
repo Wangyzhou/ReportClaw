@@ -18,19 +18,72 @@ metadata: {"openclaw": {"always": true}}
 | 子任务失败 | `update-task-status` = `failed` |
 | 所有子任务完成 | 一级任务 `update-task-status` = `completed` |
 
-## 调用约定
+---
 
+## MCP 工具
+
+通过 `mcporter call task-progress-mcp.<tool>` 调用。
+
+### create-task
+
+**mcporter 调用格式：**
 ```
-mcporter call <mcp-server>.create-task \
-  nodeId="<CLAW_NODE_ID>" \
+mcporter call task-progress-mcp.create-task \
+  nodeId="<唯一节点ID>" \
   agentId="<session_status 返回的 sessionKey>" \
   taskName="<动词+对象>" \
-  taskStatus="pending"
+  taskStatus="pending" \
+  parentId="<父节点ID>"
 ```
 
-**参数注意**：
-- `agentId` 必须用 OpenClaw `session_status` 返回的 sessionKey，不能用其他 label
-- `taskName` 用中文："检索 AI 市场数据"、"写作第二章"
+**参数说明：**
+- `nodeId`：全局唯一，建议格式 `<session_prefix>-<序号>`，如 `coord-1`、`ret-2`
+- `agentId`：必须用 OpenClaw `session_status` 返回的 sessionKey
+- `taskName`：中文，动词+对象，如 `检索 AI 市场数据`、`写作第二章`
+- `taskStatus`：初始固定传 `pending`
+- `parentId`：可选，父节点的 `nodeId`；Coordinator 创建主任务时不传，子 Agent 创建子任务时传入主任务的 nodeId
+
+**返回结构：**
+```json
+{
+  "nodeId": "coord-1",
+  "agentId": "agent::main:main",
+  "taskName": "检索 AI 市场数据",
+  "taskStatus": "pending",
+  "createdAt": 1713700000000,
+  "updatedAt": 1713700000000
+}
+```
+
+---
+
+### update-task-status
+
+**mcporter 调用格式：**
+```
+mcporter call task-progress-mcp.update-task-status \
+  nodeId="<唯一节点ID>" \
+  agentId="<sessionKey>" \
+  taskStatus="running|completed|failed"
+```
+
+**参数说明：**
+- `nodeId`：必须与 `create-task` 时一致
+- `taskStatus`：`running` / `completed` / `failed`
+
+**返回结构：**
+```json
+{
+  "nodeId": "coord-1",
+  "agentId": "agent::main:main",
+  "taskName": "检索 AI 市场数据",
+  "taskStatus": "completed",
+  "createdAt": 1713700000000,
+  "updatedAt": 1713700030000
+}
+```
+
+---
 
 ## 任务命名规范（沿用 HEARTBEAT.md）
 

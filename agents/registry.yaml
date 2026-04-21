@@ -21,6 +21,14 @@ agents:
     temperature: 0.3
     is_orchestrator: true
     can_delegate_to: [retriever, writer, rewriter, reviewer]
+    subagents:
+      allowAgents:
+        - reportclaw-retriever
+        - reportclaw-writer
+        - reportclaw-rewriter
+        - reportclaw-reviewer
+      maxConcurrent: 3
+      runTimeoutSeconds: 120
     skills:
       - agents/coordinator/skills/gear_detection/SKILL.md
       - agents/coordinator/skills/task_dispatch/SKILL.md
@@ -96,7 +104,9 @@ agents:
     agents_manual: agents/reviewer/AGENTS.md
     model: claude-sonnet-4-6
     temperature: 0.2
-    can_delegate_to: [retriever]   # 反查 KB 验证 chunk_id
+    tools:
+      - ragflow_get_chunk
+    can_delegate_to: []
     skills:
       - agents/reviewer/skills/review_checklist/SKILL.md
       - agents/reviewer/skills/citation_verification/SKILL.md

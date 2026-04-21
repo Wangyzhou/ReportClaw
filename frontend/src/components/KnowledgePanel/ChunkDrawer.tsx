@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import styles from './ChunkDrawer.module.css'
-import { getChunk } from '../../services/api'
+import { lookupChunk } from '../../services/api'
 import type { ChunkResult } from '../../types'
 
 interface Props {
@@ -15,7 +15,7 @@ export function ChunkDrawer({ chunkId, onClose }: Props) {
   useEffect(() => {
     if (!chunkId) { setChunk(null); return }
     setLoading(true)
-    getChunk('', '', chunkId)
+    lookupChunk(chunkId)
       .then(setChunk)
       .catch(() => setChunk(null))
       .finally(() => setLoading(false))

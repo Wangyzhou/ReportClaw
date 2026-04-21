@@ -1,0 +1,102 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px 8px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.activePulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #3b82f6;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.85); }
+}
+
+.empty {
+  padding: 16px 14px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.tree {
+  list-style: none;
+  margin: 0;
+  padding: 8px 0;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.rootNode {
+  padding: 0;
+}
+
+.nodeRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 14px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.nodeRow:hover {
+  background: var(--bg-hover, rgba(0,0,0,0.04));
+}
+
+.icon {
+  flex-shrink: 0;
+  font-size: 13px;
+  width: 18px;
+  text-align: center;
+}
+
+.name {
+  flex: 1;
+  color: var(--text-primary, #1a1a1a);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nodeId {
+  font-size: 10px;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.children {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.childNode .nodeRow {
+  padding-left: 36px;
+}
+
+.childNode .name {
+  color: var(--text-secondary, #444);
+}

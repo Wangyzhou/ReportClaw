@@ -91,6 +91,16 @@ export interface RetrievalResponse {
   total: number
 }
 
+export interface TaskNode {
+  nodeId: string
+  agentId: string
+  taskName: string
+  taskStatus: 'pending' | 'running' | 'completed' | 'failed'
+  parentId?: string
+  createdAt: number
+  updatedAt: number
+}
+
 export type ChatMode = 'smart' | 'report_gen' | 'report_rewrite'
 
 export interface MentionedDoc {

@@ -43,6 +43,7 @@ public class RagFlowService {
     private final ObjectMapper objectMapper;
     private final String embeddingModel;
     private final Map<String, String> categoryToDatasetId = new LinkedHashMap<>();
+    private final Map<String, ChunkResult> chunkCache = new java.util.concurrent.ConcurrentHashMap<>();
 
     public RagFlowService(RagFlowProperties props, ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
@@ -258,17 +259,27 @@ public class RagFlowService {
         ArrayNode dsIds = body.putArray("dataset_ids");
         datasetIds.forEach(dsIds::add);
         body.put("top_k", request.topK());
+        body.put("similarity_threshold", 0.1);
         if (request.docIds() != null && !request.docIds().isEmpty()) {
             ArrayNode docIds = body.putArray("document_ids");
             request.docIds().forEach(docIds::add);
         }
 
+        log.info("Retrieving chunks: question={}, dataset_ids={}", request.question(), datasetIds);
         return webClient.post()
                 .uri("/api/v1/retrieval")
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(body)
                 .retrieve()
+                .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
+                        resp -> resp.bodyToMono(String.class)
+                                .doOnNext(b -> log.error("RAGFlow retrieval error HTTP {}: {}", resp.statusCode(), b))
+                                .thenReturn(new RuntimeException("RAGFlow retrieval HTTP error: " + resp.statusCode())))
                 .bodyToMono(JsonNode.class)
+                .doOnNext(resp -> {
+                    int code = resp.path("code").asInt(0);
+                    if (code != 0) log.warn("RAGFlow retrieval code={}: {}", code, resp.path("message").asText());
+                })
                 .map(resp -> {
                     List<ChunkResult> chunks = new ArrayList<>();
                     JsonNode data = resp.path("data");
@@ -285,8 +296,20 @@ public class RagFlowService {
                                     c.path("document_id").asText(c.path("doc_id").asText(""))));
                         }
                     }
+                    chunks.forEach(c -> chunkCache.put(c.chunkId(), c));
+                    if (chunkCache.size() > 500) {
+                        chunkCache.keySet().stream().findFirst().ifPresent(chunkCache::remove);
+                    }
                     return new RetrievalResponse(chunks, chunks.size());
+                })
+                .onErrorResume(ex -> {
+                    log.error("retrieveChunks failed (datasets={}): {}", datasetIds, ex.getMessage());
+                    return Mono.just(new RetrievalResponse(List.of(), 0));
                 });
+    }
+
+    public java.util.Optional<ChunkResult> lookupChunkById(String chunkId) {
+        return java.util.Optional.ofNullable(chunkCache.get(chunkId));
     }
 
     public Mono<ChunkResult> getChunk(String datasetId, String documentId, String chunkId) {

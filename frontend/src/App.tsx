@@ -5,6 +5,7 @@ import { ChatPanel } from './components/ChatPanel/ChatPanel'
 import { DeliveryPanel } from './components/DeliveryPanel/DeliveryPanel'
 import { ChunkDrawer } from './components/KnowledgePanel/ChunkDrawer'
 import { useChat } from './hooks/useChat'
+import { clearTasks } from './services/api'
 import type { KnowledgeDocument, ChatPayload } from './types'
 
 export default function App() {
@@ -26,6 +27,7 @@ export default function App() {
   const handleSend = async (payload: ChatPayload) => {
     const sessionKey = state.sessions[0]?.key || 'agent:main:main'
     try {
+      await clearTasks()
       await sendMessage(payload, sessionKey)
     } catch (err) {
       dispatch({

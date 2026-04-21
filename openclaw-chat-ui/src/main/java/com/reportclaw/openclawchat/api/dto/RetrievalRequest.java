@@ -10,5 +10,7 @@ public record RetrievalRequest(
 ) {
     public RetrievalRequest {
         if (topK <= 0) topK = 5;
+        if (categories == null) categories = java.util.List.of();
+        if (docIds == null) docIds = java.util.List.of();
     }
 }
