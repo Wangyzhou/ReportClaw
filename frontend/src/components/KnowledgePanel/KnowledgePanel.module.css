@@ -1,0 +1,177 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--line);
+  background: rgba(12, 18, 16, 0.9);
+  overflow: hidden;
+}
+
+.header {
+  padding: 24px 20px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.label {
+  display: block;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+}
+
+.title {
+  margin: 0;
+  font-size: 1.25rem;
+  line-height: 1.2;
+}
+
+.listArea {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 0;
+}
+
+.footer {
+  padding: 16px 20px;
+  border-top: 1px solid var(--line);
+}
+
+/* Category Tabs */
+.tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 12px 12px 0;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.tab:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+}
+
+.tabActive {
+  background: rgba(76, 227, 138, 0.1);
+  border-color: rgba(76, 227, 138, 0.3);
+  color: var(--accent);
+}
+
+/* Document List */
+.docList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.docItem {
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.docItem:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.docName {
+  font-size: 0.85rem;
+  color: var(--text);
+  margin-bottom: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.docMeta {
+  display: flex;
+  gap: 10px;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+.docStatus {
+  font-weight: 600;
+}
+
+.status_ready {
+  color: var(--accent);
+}
+
+.status_parsing {
+  color: var(--accent-3);
+}
+
+.status_uploading {
+  color: var(--accent-3);
+}
+
+.status_error {
+  color: var(--accent-2);
+}
+
+.deleteBtn {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+}
+
+.docItem:hover .deleteBtn {
+  opacity: 1;
+}
+
+.deleteBtn:hover {
+  color: var(--accent-2);
+}
+
+.uploadBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.empty {
+  padding: 24px 20px;
+  color: var(--text-dim);
+  text-align: center;
+  font-size: 0.85rem;
+}
+
+/* Upload Button */
+.uploadBtn {
+  width: 100%;
+  padding: 10px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.uploadBtn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(76, 227, 138, 0.06);
+}
