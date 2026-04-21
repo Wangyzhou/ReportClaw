@@ -5,6 +5,18 @@ openclaw-chat-ui/.m2/
 openclaw-chat-ui/.idea/
 .idea/
 
+# OpenClaw runtime artifacts. Do NOT point `openclaw agents add --workspace`
+# at this repo — OpenClaw assumes it owns the workspace and will (a) overwrite
+# user files with stubs on register, (b) trash the whole directory on delete.
+# Use scripts/sync_to_openclaw_workspace.py instead. These ignores are a belt-
+# and-suspenders safety in case OpenClaw is ever pointed here by accident.
+agents/*/.openclaw/
+agents/*/.git/
+agents/*/config/mcporter.json
+agents/*/scripts/.openclaw_*
+agents/*/BOOTSTRAP.md
+.env
+
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/

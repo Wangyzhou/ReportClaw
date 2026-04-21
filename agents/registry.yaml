@@ -1,61 +1,115 @@
-# T5 Report Agent — Registry
-# Clawith / OpenClaw 部署时读取此文件加载 5 个 Agent
-# 业务规则在各 Agent 的 soul.md 中（markdown 写人格，YAML 写部署元数据）
+# ReportClaw — Registry
+# OpenClaw 部署时读取此文件加载 5 个 Agent。
+# 约定：每个 agent 目录结构对齐 MediaClaw（SOUL/AGENTS/HEARTBEAT/IDENTITY/MEMORY/TOOLS/USER + skills/<name>/SKILL.md）
+# 业务规则在各 Agent 的 SOUL.md / AGENTS.md 中，部署元数据在本文件。
 
-version: "0.1"
-team_name: "T5 Report Writing Team"
+version: "0.2"
+team_name: "ReportClaw Team"
 created_at: "2026-04-17"
+updated_at: "2026-04-21"
+
+# 5 个 Agent 的目录根。OpenClaw 若按 workspace-<agent>/ 约定加载，可在此映射。
+workspace_prefix: "agents/"
 
 agents:
   - name: coordinator
     role: 报告协调员
-    soul: agents/coordinator/soul.md
-    skills_dir: agents/coordinator/skills/
+    workspace: agents/coordinator
+    soul: agents/coordinator/SOUL.md
+    agents_manual: agents/coordinator/AGENTS.md
     model: claude-sonnet-4-6
     temperature: 0.3
     is_orchestrator: true
     can_delegate_to: [retriever, writer, rewriter, reviewer]
+    skills:
+      - agents/coordinator/skills/gear_detection/SKILL.md
+      - agents/coordinator/skills/task_dispatch/SKILL.md
+      - agents/coordinator/skills/quality_check/SKILL.md
+      - agents/coordinator/skills/version_control/SKILL.md
+    shared_skills:
+      - agents/_shared/task-progress-manager/SKILL.md
+      - agents/_shared/verification-before-completion/SKILL.md
+      - agents/_shared/loop-circuit-breaker/SKILL.md
+      - agents/_shared/fact-check-before-trust/SKILL.md
+      - agents/_shared/wal-protocol/SKILL.md
 
   - name: retriever
     role: 知识库检索员
-    soul: agents/retriever/soul.md
-    skills_dir: agents/retriever/skills/
+    workspace: agents/retriever
+    soul: agents/retriever/SOUL.md
+    agents_manual: agents/retriever/AGENTS.md
     model: claude-haiku-4-5
     temperature: 0.0
     tools:
       - ragflow_hybrid_search
       - ragflow_get_chunk
     can_delegate_to: []
+    skills:
+      - agents/retriever/skills/hybrid_search/SKILL.md
+      - agents/retriever/skills/source_tracking/SKILL.md
+      - agents/retriever/skills/coverage_analysis/SKILL.md
+    shared_skills:
+      - agents/_shared/fact-check-before-trust/SKILL.md
+      - agents/_shared/verification-before-completion/SKILL.md
 
   - name: writer
     role: 报告写作员
-    soul: agents/writer/soul.md
-    skills_dir: agents/writer/skills/
+    workspace: agents/writer
+    soul: agents/writer/SOUL.md
+    agents_manual: agents/writer/AGENTS.md
     model: claude-sonnet-4-6
     temperature: 0.6
     can_delegate_to: []
+    skills:
+      - agents/writer/skills/outline_generation/SKILL.md
+      - agents/writer/skills/section_writing/SKILL.md
+      - agents/writer/skills/citation_insertion/SKILL.md
+      - agents/writer/skills/style_mimicking/SKILL.md
+    shared_skills:
+      - agents/_shared/verification-before-completion/SKILL.md
+      - agents/_shared/task-progress-manager/SKILL.md
+      - agents/_shared/loop-circuit-breaker/SKILL.md
 
   - name: rewriter
     role: 报告改写员
-    soul: agents/rewriter/soul.md
-    skills_dir: agents/rewriter/skills/
+    workspace: agents/rewriter
+    soul: agents/rewriter/SOUL.md
+    agents_manual: agents/rewriter/AGENTS.md
     model: claude-sonnet-4-6
     temperature: 0.4
     can_delegate_to: []
+    skills:
+      - agents/rewriter/skills/data_update/SKILL.md
+      - agents/rewriter/skills/perspective_shift/SKILL.md
+      - agents/rewriter/skills/content_expansion/SKILL.md
+      - agents/rewriter/skills/style_conversion/SKILL.md
+      - agents/rewriter/skills/diff_generator/SKILL.md
+      - agents/rewriter/skills/structure_parser/SKILL.md
+    shared_skills:
+      - agents/_shared/verification-before-completion/SKILL.md
+      - agents/_shared/wal-protocol/SKILL.md
 
   - name: reviewer
     role: 报告审查员
-    soul: agents/reviewer/soul.md
-    skills_dir: agents/reviewer/skills/
+    workspace: agents/reviewer
+    soul: agents/reviewer/SOUL.md
+    agents_manual: agents/reviewer/AGENTS.md
     model: claude-sonnet-4-6
     temperature: 0.2
     can_delegate_to: [retriever]   # 反查 KB 验证 chunk_id
+    skills:
+      - agents/reviewer/skills/review_checklist/SKILL.md
+      - agents/reviewer/skills/citation_verification/SKILL.md
+      - agents/reviewer/skills/coverage_scoring/SKILL.md
+    shared_skills:
+      - agents/_shared/fact-check-before-trust/SKILL.md
+      - agents/_shared/verification-before-completion/SKILL.md
 
-# Agent 间通信契约
+# Agent 间协作参数（envelope/传输归 OpenClaw CollaborationService，本文件不管）
 protocol:
-  envelope_schema: docs/a2a-message-schema.md
   max_review_rounds: 2
   default_timeout_seconds: 60
+  payload_contract: docs/payload-schema.md
 
 # 知识库后端（王亚洲负责搭建）
 knowledge_base:
@@ -63,3 +117,8 @@ knowledge_base:
   embedding_model: bge-m3
   reranker: bge-reranker-v2
   endpoint: "http://localhost:9380"   # 占位，王亚洲填实际地址
+  datasets:
+    policies: 政策法规
+    industry_reports: 行业报告
+    historical_reports: 历史报告
+    media_news: 媒体资讯
