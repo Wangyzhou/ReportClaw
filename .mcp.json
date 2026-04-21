@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "rag-mcp": {
+      "type": "http",
+      "url": "http://192.168.4.176:8082/mcps/rag-mcp"
+    },
+    "task-progress-mcp": {
+      "type": "http",
+      "url": "http://192.168.4.176:8082/mcps/task-progress-mcp"
+    }
+  }
+}

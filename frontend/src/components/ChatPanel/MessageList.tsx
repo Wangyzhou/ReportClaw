@@ -7,9 +7,10 @@ import type { ChatMessage, InlineActivity } from '../../types'
 interface Props {
   messages: ChatMessage[]
   activities: InlineActivity[]
+  onRefClick?: (chunkId: string) => void
 }
 
-export function MessageList({ messages, activities }: Props) {
+export function MessageList({ messages, activities, onRefClick }: Props) {
   const { ref } = useAutoScroll<HTMLDivElement>([messages, activities])
 
   return (
@@ -28,7 +29,7 @@ export function MessageList({ messages, activities }: Props) {
 
         return (
           <div key={msg.id}>
-            <MessageBubble message={msg} />
+            <MessageBubble message={msg} onRefClick={onRefClick} />
             {activitiesBetween.map(act => (
               <TaskProgress key={act.key} activity={act} />
             ))}

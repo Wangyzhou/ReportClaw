@@ -62,26 +62,12 @@ description: "保证每条检索结果都带完整、可点击跳转的溯源元
 
 | ReportClaw category | RAGFlow dataset name | dataset_id（示例） |
 |--------------------|---------------------|-------------------|
-| 政策法规 | `policies` | `c7ee740...a2c11efb` |
-| 行业报告 | `industry_reports` | `d8fe851...b3d22fgc` |
-| 历史报告 | `historical_reports` | `e9ff962...c4e33ghd` |
-| 媒体资讯 | `media_news` | `fa0073...d5f44hie` |
+| 政策法规 | `reportclaw_policy` | `c7ee740...a2c11efb` |
+| 行业报告 | `reportclaw_industry` | `d8fe851...b3d22fgc` |
+| 历史报告 | `reportclaw_history` | `e9ff962...c4e33ghd` |
+| 媒体资讯 | `reportclaw_media` | `fa0073...d5f44hie` |
 
-Retriever 检索时按 scope.categories 映射 dataset_ids 传给 RAGFlow：
-
-```python
-# 伪代码
-def retrieve(query, categories):
-    dataset_ids = [CATEGORY_TO_DATASET[c] for c in categories]
-    resp = ragflow.post("/api/v1/retrieval", {
-        "question": query,
-        "dataset_ids": dataset_ids,
-        "top_k": 10,
-        "keyword": True,
-        "highlight": True,
-    })
-    return map_to_reportclaw_schema(resp)
-```
+**注意**：category → dataset_id 的映射由 Spring Boot 后端维护，Retriever 无需硬编码 dataset_id。调用 `ragflow_hybrid_search` 时传 `categories` 列表即可，后端自动转换。
 
 ---
 

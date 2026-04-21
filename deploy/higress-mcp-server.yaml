@@ -1,0 +1,132 @@
+# ReportClaw — Higress MCP Server 插件配置
+# 将 Spring Boot 两个 KB 接口转为 MCP 工具，供 OpenClaw Agent 调用。
+#
+# 用法（二选一）：
+#   A. Higress Console → 插件市场 → mcp-server → 新建/编辑路由级配置，粘贴下面 spec.defaultConfig 内容
+#   B. kubectl apply -f higress-mcp-server.yaml（需先确认 WasmPlugin image URL 与你的 Higress 版本匹配）
+#
+# 部署前修改：
+#   1. 将所有 http://reportclaw-backend:8080 替换为 Spring Boot 实际地址
+#   2. 如需认证，在 server.securitySchemes 里补充 apiKey / Bearer Token
+# ──────────────────────────────────────────────────────────────
+
+apiVersion: extensions.higress.io/v1alpha1
+kind: WasmPlugin
+metadata:
+  name: mcp-server-reportclaw-kb
+  namespace: higress-system
+spec:
+  url: oci://higress-registry.cn-hangzhou.cr.aliyuncs.com/plugins/mcp-server:latest
+  # 全局默认配置（所有路由共用）；如只想挂在某条路由上，改用 matchRules）
+  defaultConfig:
+    server:
+      name: reportclaw-kb
+      # 如果 Spring Boot 需要 API Key，取消注释并填写：
+      # securitySchemes:
+      #   - id: InternalApiKey
+      #     type: apiKey
+      #     in: header
+      #     name: X-Internal-Token
+      #     defaultCredential: "YOUR_TOKEN_HERE"
+
+    tools:
+
+      # ─── 工具 1：知识库混合检索 ─────────────────────────────
+      - name: ragflow_hybrid_search
+        description: >
+          对 ReportClaw 知识库执行混合检索（向量 + 关键词 + RRF），
+          返回相关 chunks 及溯源元数据。
+          支持按 categories 过滤分类，按 docIds 限定文档范围（@mention 场景）。
+        args:
+          - name: question
+            description: "检索问题或章节主题"
+            type: string
+            required: true
+            position: body
+
+          - name: categories
+            description: >
+              限定检索的知识库分类列表。
+              可选值：政策法规、行业报告、历史报告、媒体资讯。
+              为空则搜索全库。
+            type: array
+            items:
+              type: string
+            required: false
+            position: body
+
+          - name: docIds
+            description: >
+              限定检索范围的文档 ID 列表（来自前端 @mention 解析的 docId）。
+              为空则不限制文档范围。
+            type: array
+            items:
+              type: string
+            required: false
+            position: body
+
+          - name: topK
+            description: "返回的最大 chunk 数，默认 10"
+            type: integer
+            required: false
+            default: 10
+            position: body
+
+        requestTemplate:
+          url: "http://reportclaw-backend:8080/api/kb/retrieve"
+          method: POST
+          argsToJsonBody: true
+          # 如启用 API Key 认证，取消注释：
+          # security:
+          #   id: InternalApiKey
+
+        responseTemplate:
+          # Spring Boot 已返回标准 JSON，直接透传
+          prependBody: ""
+
+      # ─── 工具 2：按 chunk_id 反查原文 ──────────────────────
+      - name: ragflow_get_chunk
+        description: >
+          按 chunk_id 反查 RAGFlow 中某个 chunk 的原始文本内容。
+          Reviewer agent 用于验证报告引用 [ref:xxx] 的真实性和数据一致性。
+        args:
+          - name: datasetId
+            description: "RAGFlow dataset ID（来自 source.dataset_id，32 位 hex）"
+            type: string
+            required: true
+            position: path
+
+          - name: docId
+            description: "文档 ID（来自 source.doc_id，32 位 hex）"
+            type: string
+            required: true
+            position: path
+
+          - name: chunkId
+            description: "chunk ID（报告中 [ref:xxx] 的 xxx，32 位 hex）"
+            type: string
+            required: true
+            position: path
+
+        requestTemplate:
+          url: "http://reportclaw-backend:8080/api/kb/chunks/{{.args.datasetId}}/{{.args.docId}}/{{.args.chunkId}}"
+          method: GET
+          # 如启用 API Key 认证，取消注释：
+          # security:
+          #   id: InternalApiKey
+
+        responseTemplate:
+          prependBody: ""
+
+# ──────────────────────────────────────────────────────────────
+# （可选）如果只想把 MCP 工具挂在特定路由上，删除 defaultConfig，改用：
+#
+# spec:
+#   matchRules:
+#     - ingress:
+#       - reportclaw-mcp-route      # 对应 Higress Ingress 资源名
+#       config:
+#         server:
+#           name: reportclaw-kb
+#         tools:
+#           # ... 同上 ...

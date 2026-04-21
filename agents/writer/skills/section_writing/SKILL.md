@@ -63,6 +63,6 @@ description: "按章节逐一生成内容，是 Writer 的核心干活 skill。"
 {
   "title": "...",
   "content": "markdown 段落",
-  "citations": ["doc_001_p15_3", "doc_001_p16_0"]
+  "citations": ["d78435d142bd5cf6704da62c778795c5", "b48c170e90f70af998485c1065490726"]
 }
 ```

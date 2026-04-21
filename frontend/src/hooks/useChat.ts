@@ -1,5 +1,5 @@
 import { useReducer, useCallback } from 'react'
-import type { ChatMessage, InlineActivity, ConnectionStatus, Session, StreamEvent } from '../types'
+import type { ChatMessage, InlineActivity, ConnectionStatus, Session, StreamEvent, ChatPayload } from '../types'
 
 interface ChatState {
   messages: ChatMessage[]
@@ -131,14 +131,14 @@ export function useChat() {
     }
   }, [])
 
-  const sendMessage = useCallback(async (message: string, sessionKey: string) => {
+  const sendMessage = useCallback(async (payload: ChatPayload, sessionKey: string) => {
     dispatch({ type: 'RESET_STREAM' })
     dispatch({ type: 'SET_CONNECTION', status: 'streaming', label: '流式处理中', badge: '正在接收' })
 
     const userMsg: ChatMessage = {
       id: `msg-${Date.now()}`,
       role: 'user',
-      text: message,
+      text: payload.text,
       timestamp: new Date(),
     }
     dispatch({ type: 'ADD_MESSAGE', message: userMsg })
@@ -146,7 +146,12 @@ export function useChat() {
     const res = await fetch('/api/chat/stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message, sessionKey }),
+      body: JSON.stringify({
+        message: payload.text,
+        sessionKey,
+        mode: payload.mode,
+        mentionedDocs: payload.mentionedDocs,
+      }),
     })
 
     if (!res.ok || !res.body) throw new Error(`chat stream failed (${res.status})`)

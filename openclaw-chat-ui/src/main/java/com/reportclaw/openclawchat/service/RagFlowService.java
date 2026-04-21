@@ -4,9 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.reportclaw.openclawchat.api.dto.DatasetInfo;
-import com.reportclaw.openclawchat.api.dto.DocumentInfo;
-import com.reportclaw.openclawchat.api.dto.UploadResult;
+import com.reportclaw.openclawchat.api.dto.*;
 import com.reportclaw.openclawchat.config.RagFlowProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,6 +14,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.http.codec.multipart.FilePart;
+import jakarta.annotation.PostConstruct;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -42,14 +41,25 @@ public class RagFlowService {
 
     private final WebClient webClient;
     private final ObjectMapper objectMapper;
+    private final String embeddingModel;
     private final Map<String, String> categoryToDatasetId = new LinkedHashMap<>();
+    private final Map<String, ChunkResult> chunkCache = new java.util.concurrent.ConcurrentHashMap<>();
 
     public RagFlowService(RagFlowProperties props, ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
+        this.embeddingModel = props.getEmbeddingModel();
         this.webClient = WebClient.builder()
                 .baseUrl(props.getBaseUrl())
                 .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + props.getApiKey())
                 .build();
+    }
+
+    @PostConstruct
+    void init() {
+        listDatasets()
+                .doOnNext(ds -> log.info("Loaded {} datasets on startup", ds.size()))
+                .doOnError(e -> log.warn("Failed to load datasets on startup: {}", e.getMessage()))
+                .subscribe();
     }
 
     public Mono<List<DatasetInfo>> listDatasets() {
@@ -96,6 +106,9 @@ public class RagFlowService {
         body.put("name", name);
         body.put("description", "ReportClaw KB - " + name);
         body.put("chunk_method", "naive");
+        if (embeddingModel != null && !embeddingModel.isEmpty()) {
+            body.put("embedding_model", embeddingModel);
+        }
 
         return webClient.post()
                 .uri("/api/v1/datasets")
@@ -231,10 +244,111 @@ public class RagFlowService {
         return null;
     }
 
+    public Mono<RetrievalResponse> retrieveChunks(RetrievalRequest request) {
+        List<String> datasetIds = new ArrayList<>();
+        for (String category : request.categories()) {
+            String dsId = categoryToDatasetId.get(category);
+            if (dsId != null) datasetIds.add(dsId);
+        }
+        if (datasetIds.isEmpty()) {
+            datasetIds.addAll(categoryToDatasetId.values());
+        }
+
+        ObjectNode body = objectMapper.createObjectNode();
+        body.put("question", request.question());
+        ArrayNode dsIds = body.putArray("dataset_ids");
+        datasetIds.forEach(dsIds::add);
+        body.put("top_k", request.topK());
+        body.put("similarity_threshold", 0.1);
+        if (request.docIds() != null && !request.docIds().isEmpty()) {
+            ArrayNode docIds = body.putArray("document_ids");
+            request.docIds().forEach(docIds::add);
+        }
+
+        log.info("Retrieving chunks: question={}, dataset_ids={}", request.question(), datasetIds);
+        return webClient.post()
+                .uri("/api/v1/retrieval")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(body)
+                .retrieve()
+                .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
+                        resp -> resp.bodyToMono(String.class)
+                                .doOnNext(b -> log.error("RAGFlow retrieval error HTTP {}: {}", resp.statusCode(), b))
+                                .thenReturn(new RuntimeException("RAGFlow retrieval HTTP error: " + resp.statusCode())))
+                .bodyToMono(JsonNode.class)
+                .doOnNext(resp -> {
+                    int code = resp.path("code").asInt(0);
+                    if (code != 0) log.warn("RAGFlow retrieval code={}: {}", code, resp.path("message").asText());
+                })
+                .map(resp -> {
+                    List<ChunkResult> chunks = new ArrayList<>();
+                    JsonNode data = resp.path("data");
+                    JsonNode chunkArray = data.path("chunks");
+                    if (!chunkArray.isArray()) chunkArray = data;
+                    if (chunkArray.isArray()) {
+                        for (JsonNode c : chunkArray) {
+                            chunks.add(new ChunkResult(
+                                    c.path("id").asText(c.path("chunk_id").asText("")),
+                                    c.path("document_keyword").asText(c.path("document_name").asText(c.path("doc_name").asText(""))),
+                                    c.path("content").asText(c.path("content_with_weight").asText("")),
+                                    c.path("similarity").asDouble(c.path("score").asDouble(0)),
+                                    c.path("dataset_id").asText(""),
+                                    c.path("document_id").asText(c.path("doc_id").asText(""))));
+                        }
+                    }
+                    chunks.forEach(c -> chunkCache.put(c.chunkId(), c));
+                    if (chunkCache.size() > 500) {
+                        chunkCache.keySet().stream().findFirst().ifPresent(chunkCache::remove);
+                    }
+                    return new RetrievalResponse(chunks, chunks.size());
+                })
+                .onErrorResume(ex -> {
+                    log.error("retrieveChunks failed (datasets={}): {}", datasetIds, ex.getMessage());
+                    return Mono.just(new RetrievalResponse(List.of(), 0));
+                });
+    }
+
+    public java.util.Optional<ChunkResult> lookupChunkById(String chunkId) {
+        return java.util.Optional.ofNullable(chunkCache.get(chunkId));
+    }
+
+    public Mono<ChunkResult> getChunk(String datasetId, String documentId, String chunkId) {
+        return webClient.get()
+                .uri(uriBuilder -> uriBuilder
+                        .path("/api/v1/datasets/{datasetId}/documents/{docId}/chunks")
+                        .queryParam("page", 1)
+                        .queryParam("page_size", 100)
+                        .build(datasetId, documentId))
+                .retrieve()
+                .bodyToMono(JsonNode.class)
+                .map(resp -> {
+                    JsonNode data = resp.path("data");
+                    JsonNode chunkArray = data.path("chunks");
+                    if (!chunkArray.isArray()) chunkArray = data;
+                    if (chunkArray.isArray()) {
+                        for (JsonNode c : chunkArray) {
+                            String id = c.path("id").asText(c.path("chunk_id").asText(""));
+                            if (chunkId.equals(id)) {
+                                return new ChunkResult(
+                                        id,
+                                        c.path("document_name").asText(""),
+                                        c.path("content").asText(c.path("content_with_weight").asText("")),
+                                        c.path("score").asDouble(0),
+                                        datasetId,
+                                        documentId);
+                            }
+                        }
+                    }
+                    return new ChunkResult(chunkId, "", "", 0, datasetId, documentId);
+                });
+    }
+
     private String mapStatus(String status, String run) {
-        if ("1".equals(status) || "true".equals(run)) return "parsing";
-        if ("2".equals(status)) return "ready";
-        if ("-1".equals(status)) return "error";
+        if ("FAIL".equalsIgnoreCase(run)) return "error";
+        if ("RUNNING".equalsIgnoreCase(run)) return "parsing";
+        if ("2".equals(status) || "DONE".equalsIgnoreCase(run)) return "ready";
+        if ("1".equals(status)) return "parsing";
+        if ("-1".equals(status) || "3".equals(status)) return "error";
         return "uploading";
     }
 }

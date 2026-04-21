@@ -1,8 +1,6 @@
 package com.reportclaw.openclawchat.api;
 
-import com.reportclaw.openclawchat.api.dto.DatasetInfo;
-import com.reportclaw.openclawchat.api.dto.DocumentInfo;
-import com.reportclaw.openclawchat.api.dto.UploadResult;
+import com.reportclaw.openclawchat.api.dto.*;
 import com.reportclaw.openclawchat.service.RagFlowService;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.multipart.FilePart;
@@ -57,5 +55,25 @@ public class KnowledgeBaseController {
             @RequestParam("category") String category,
             @PathVariable("documentId") String documentId) {
         return ragFlowService.deleteDocument(category, documentId);
+    }
+
+    @PostMapping("/retrieve")
+    public Mono<RetrievalResponse> retrieve(@RequestBody RetrievalRequest request) {
+        return ragFlowService.retrieveChunks(request);
+    }
+
+    @GetMapping("/chunks/{datasetId}/{docId}/{chunkId}")
+    public Mono<ChunkResult> getChunk(
+            @PathVariable("datasetId") String datasetId,
+            @PathVariable("docId") String docId,
+            @PathVariable("chunkId") String chunkId) {
+        return ragFlowService.getChunk(datasetId, docId, chunkId);
+    }
+
+    @GetMapping("/chunks/lookup/{chunkId}")
+    public org.springframework.http.ResponseEntity<ChunkResult> lookupChunk(@PathVariable("chunkId") String chunkId) {
+        return ragFlowService.lookupChunkById(chunkId)
+                .map(org.springframework.http.ResponseEntity::ok)
+                .orElse(org.springframework.http.ResponseEntity.notFound().build());
     }
 }

@@ -19,10 +19,10 @@ description: "用户没给提纲时，根据主题 + Retriever 返回的 results
 ## 输出
 ```json
 [
-  { "level": 1, "title": "一、行业概览", "guidance": "覆盖市场规模和增长趋势", "supporting_chunks": ["doc_001_p15_3"] },
-  { "level": 2, "title": "1.1 市场规模", "supporting_chunks": ["doc_001_p15_3"] },
+  { "level": 1, "title": "一、行业概览", "guidance": "覆盖市场规模和增长趋势", "supporting_chunks": ["d78435d142bd5cf6704da62c778795c5"] },
+  { "level": 2, "title": "1.1 市场规模", "supporting_chunks": ["d78435d142bd5cf6704da62c778795c5"] },
   { "level": 2, "title": "1.2 增长趋势" },
-  { "level": 1, "title": "二、政策环境", "supporting_chunks": ["doc_002_p3_1"] }
+  { "level": 1, "title": "二、政策环境", "supporting_chunks": ["b48c170e90f70af998485c1065490726"] }
 ]
 ```
 
@@ -73,24 +73,24 @@ category: {chunk.source.category}
 
 **topic**: "2025 年中国生成式 AI 产业分析报告" / **max_length**: 5000
 
-**retrieval_results**（简化）:
-- `doc_001_p15_3` 行业报告 "2025 AI 市场规模 3200 亿美元"
-- `doc_002_p8_1` 行业报告 "渗透率 31%，C 端用户 4.5 亿"
-- `doc_003_p2_1` 行业报告 "Q1 融资 580 亿美元，头部厂商集中度提升"
-- `doc_005_p12_4` 政策法规 "网信办《生成式 AI 服务管理办法》"
-- `doc_007_p4_2` 行业报告 "教育/医疗/金融渗透率差异"
-- `doc_009_p3_1` 行业报告 "数据中心电力消耗 3.8%"
+**retrieval_results**（简化，chunk_id 为 RAGFlow 原生 32 位 hex）:
+- `d78435d142bd5cf6704da62c778795c5` 行业报告 "2025 AI 市场规模 3200 亿美元"
+- `b48c170e90f70af998485c1065490726` 行业报告 "渗透率 31%，C 端用户 4.5 亿"
+- `a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6` 行业报告 "Q1 融资 580 亿美元，头部厂商集中度提升"
+- `e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0` 政策法规 "网信办《生成式 AI 服务管理办法》"
+- `f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6` 行业报告 "教育/医疗/金融渗透率差异"
+- `c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4` 行业报告 "数据中心电力消耗 3.8%"
 
 **✅ 正确输出**：
 ```json
 [
-  { "level": 1, "title": "一、市场概览", "guidance": "概述 2025 年整体规模+增长+用户基数", "supporting_chunks": ["doc_001_p15_3", "doc_002_p8_1"] },
-  { "level": 2, "title": "1.1 市场规模与增速", "supporting_chunks": ["doc_001_p15_3"] },
-  { "level": 2, "title": "1.2 用户渗透", "supporting_chunks": ["doc_002_p8_1"] },
-  { "level": 1, "title": "二、行业格局", "guidance": "资本流向和头部集中度", "supporting_chunks": ["doc_003_p2_1"] },
-  { "level": 1, "title": "三、垂直场景分化", "guidance": "教育/医疗/金融渗透差异分析", "supporting_chunks": ["doc_007_p4_2"] },
-  { "level": 1, "title": "四、政策与监管", "guidance": "网信办管理办法影响解读", "supporting_chunks": ["doc_005_p12_4"] },
-  { "level": 1, "title": "五、可持续挑战", "guidance": "能耗与碳排放问题", "supporting_chunks": ["doc_009_p3_1"] }
+  { "level": 1, "title": "一、市场概览", "guidance": "概述 2025 年整体规模+增长+用户基数", "supporting_chunks": ["d78435d142bd5cf6704da62c778795c5", "b48c170e90f70af998485c1065490726"] },
+  { "level": 2, "title": "1.1 市场规模与增速", "supporting_chunks": ["d78435d142bd5cf6704da62c778795c5"] },
+  { "level": 2, "title": "1.2 用户渗透", "supporting_chunks": ["b48c170e90f70af998485c1065490726"] },
+  { "level": 1, "title": "二、行业格局", "guidance": "资本流向和头部集中度", "supporting_chunks": ["a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"] },
+  { "level": 1, "title": "三、垂直场景分化", "guidance": "教育/医疗/金融渗透差异分析", "supporting_chunks": ["f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6"] },
+  { "level": 1, "title": "四、政策与监管", "guidance": "网信办管理办法影响解读", "supporting_chunks": ["e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0"] },
+  { "level": 1, "title": "五、可持续挑战", "guidance": "能耗与碳排放问题", "supporting_chunks": ["c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4"] }
 ]
 ```
 

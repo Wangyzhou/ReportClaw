@@ -43,7 +43,7 @@ Reviewer 的总指挥 skill，按顺序跑 6 项检查并汇总结果。
 
 ### 5. format_compliance（格式规范）
 - 标题层级是否乱跳（# → ### 跳级）
-- [ref:xxx] 格式是否合法（chunk_id 格式 = `doc_*_p*_*`）
+- `[ref:xxx]` 格式是否合法：chunk_id 必须是 **32 位十六进制字符串**（正则 `^[0-9a-f]{32}$`），如 `d78435d142bd5cf6704da62c778795c5`；旧格式 `doc_*_p*_*` 视为非法
 - markdown 是否能正常渲染
 - 不合规 → LOW issue（type=format）
 
