@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react'
 import styles from './ChatPanel.module.css'
 import { MessageList } from './MessageList'
 import { Composer } from './Composer'
-import type { ChatMessage, InlineActivity, ConnectionStatus, Session } from '../../types'
+import type { ChatMessage, InlineActivity, ConnectionStatus, Session, KnowledgeDocument, ChatPayload } from '../../types'
 
 interface Props {
   messages: ChatMessage[]
@@ -11,8 +11,11 @@ interface Props {
   connectionBadge: string
   currentRunId: string | null
   sessions: Session[]
-  onSend: (message: string) => Promise<void>
+  onSend: (payload: ChatPayload) => Promise<void>
   onRefreshSessions: () => void
+  onRefClick?: (chunkId: string) => void
+  documents?: KnowledgeDocument[]
+  onMentionClick?: (docId: string, category: string) => void
 }
 
 export function ChatPanel({
@@ -24,16 +27,19 @@ export function ChatPanel({
   sessions,
   onSend,
   onRefreshSessions,
+  onRefClick,
+  documents = [],
+  onMentionClick,
 }: Props) {
   const [sending, setSending] = useState(false)
   const [selectedSession, setSelectedSession] = useState('')
 
   const activeSession = selectedSession || sessions[0]?.key || 'agent:main:main'
 
-  const handleSend = useCallback(async (text: string) => {
+  const handleSend = useCallback(async (payload: ChatPayload) => {
     setSending(true)
     try {
-      await onSend(text)
+      await onSend(payload)
     } finally {
       setSending(false)
     }
@@ -67,9 +73,9 @@ export function ChatPanel({
         </div>
       </header>
 
-      <MessageList messages={messages} activities={activities} />
+      <MessageList messages={messages} activities={activities} onRefClick={onRefClick} />
 
-      <Composer onSend={handleSend} disabled={sending} />
+      <Composer onSend={handleSend} disabled={sending} documents={documents} onMentionClick={onMentionClick} />
     </section>
   )
 }

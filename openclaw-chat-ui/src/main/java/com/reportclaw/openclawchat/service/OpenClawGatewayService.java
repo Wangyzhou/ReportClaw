@@ -243,7 +243,7 @@ public class OpenClawGatewayService {
             String requestId = nextRequestId();
             ObjectNode params = objectMapper.createObjectNode();
             params.put("sessionKey", sessionKey);
-            params.put("message", request.message());
+            params.put("message", buildEnrichedMessage(request));
             params.put("idempotencyKey", "chat-" + UUID.randomUUID());
             sendFrame(requestFrame(requestId, "chat.send", params));
 
@@ -593,6 +593,25 @@ public class OpenClawGatewayService {
                 return code + ": " + message + " (" + details.toString() + ")";
             }
             return code + ": " + message;
+        }
+
+        private String buildEnrichedMessage(ChatRequest request) {
+            String mode = request.mode();
+            if (mode == null || mode.equals("smart")) {
+                return request.message();
+            }
+            StringBuilder sb = new StringBuilder();
+            sb.append("【模式:").append(mode).append("】\n");
+            var docs = request.mentionedDocs();
+            if (docs != null && !docs.isEmpty()) {
+                for (var doc : docs) {
+                    sb.append("【参考文件:").append(doc.name())
+                      .append("(").append(doc.category())
+                      .append(",id=").append(doc.id()).append(")】\n");
+                }
+            }
+            sb.append(request.message());
+            return sb.toString();
         }
 
         private String renderMessageText(JsonNode content) {

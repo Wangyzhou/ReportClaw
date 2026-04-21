@@ -27,7 +27,7 @@ export function DocumentList({ documents, onDelete }: Props) {
   return (
     <ul className={styles.docList}>
       {documents.map(doc => (
-        <li key={doc.id} className={styles.docItem}>
+        <li key={doc.id} id={`doc-${doc.id}`} className={styles.docItem}>
           <div className={styles.docName}>{doc.name}</div>
           <div className={styles.docMeta}>
             <span>{formatSize(doc.size)}</span>

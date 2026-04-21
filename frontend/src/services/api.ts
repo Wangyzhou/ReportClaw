@@ -1,4 +1,4 @@
-import type { KnowledgeDocument, UploadResult } from '../types'
+import type { KnowledgeDocument, UploadResult, RetrievalRequest, RetrievalResponse, ChunkResult } from '../types'
 
 export async function fetchSessions() {
   const res = await fetch('/api/sessions')
@@ -43,5 +43,21 @@ export async function deleteDocument(category: string, documentId: string): Prom
 export async function initDatasets(): Promise<Record<string, string>> {
   const res = await fetch('/api/kb/datasets/init', { method: 'POST' })
   if (!res.ok) throw new Error(`Init datasets failed: ${res.status}`)
+  return res.json()
+}
+
+export async function searchKnowledge(request: RetrievalRequest): Promise<RetrievalResponse> {
+  const res = await fetch('/api/kb/retrieve', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  })
+  if (!res.ok) throw new Error(`Search failed: ${res.status}`)
+  return res.json()
+}
+
+export async function getChunk(datasetId: string, docId: string, chunkId: string): Promise<ChunkResult> {
+  const res = await fetch(`/api/kb/chunks/${datasetId}/${docId}/${chunkId}`)
+  if (!res.ok) throw new Error(`Get chunk failed: ${res.status}`)
   return res.json()
 }

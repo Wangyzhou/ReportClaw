@@ -15,7 +15,7 @@ export function renderMarkdown(raw: string): string {
 
   html = html.replace(/`([^`\n]+)`/g, '<code class="md-inline-code">$1</code>')
   html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-  html = html.replace(/\[ref:([^\]]+)\]/g, '<span class="md-ref">[ref:$1]</span>')
+  html = html.replace(/\[ref:([^\]]+)\]/g, '<a class="md-ref" data-chunk-id="$1" href="#">[来源]</a>')
 
   html = html.replace(/^### (.+)$/gm, '<h4 class="md-h3">$1</h4>')
   html = html.replace(/^## (.+)$/gm, '<h3 class="md-h2">$1</h3>')

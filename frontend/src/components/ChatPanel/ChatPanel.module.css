@@ -279,21 +279,27 @@
 }
 
 .textarea {
+  position: relative;
+  z-index: 1;
   width: 100%;
   resize: vertical;
   min-height: 80px;
   max-height: 200px;
+  border: none;
   border-radius: 8px;
-  border: 1px solid var(--line-strong);
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--text);
+  background: transparent;
+  color: transparent;
+  caret-color: var(--text);
   padding: 12px 14px;
   line-height: 1.55;
 }
 
 .textarea:focus {
   outline: none;
-  border-color: var(--accent);
+}
+
+.textarea::placeholder {
+  color: var(--text-dim);
 }
 
 .composerBar {
@@ -359,10 +365,203 @@
   font-size: 0.85em;
   font-weight: 500;
   cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+}
+
+.messageBubble :global(.md-ref:hover) {
+  text-decoration-style: solid;
 }
 
 .messageBubble :global(.md-ul),
 .messageBubble :global(.md-ol) {
   margin: 0.4em 0;
   padding-left: 1.6em;
+}
+
+/* Composer header: mode pill row */
+.composerHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.modePill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--line-strong);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  transition: background 0.15s, border-color 0.15s;
+  user-select: none;
+}
+
+.modePill:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.modePill_smart {
+  border-color: rgba(103, 209, 255, 0.4);
+  color: rgba(103, 209, 255, 0.9);
+}
+
+.modePill_report_gen {
+  border-color: rgba(76, 227, 138, 0.4);
+  color: var(--accent);
+}
+
+.modePill_report_rewrite {
+  border-color: rgba(255, 200, 80, 0.4);
+  color: rgba(255, 200, 80, 0.9);
+}
+
+.modeTip {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+/* Textarea wrapper: owns border, bg, and mode color */
+.textareaWrap {
+  position: relative;
+  border-radius: 8px;
+  border: 1px solid var(--line-strong);
+  background: rgba(255, 255, 255, 0.04);
+  transition: border-color 0.2s;
+}
+
+.textareaWrap[data-mode="smart"] {
+  border-color: rgba(103, 209, 255, 0.35);
+}
+.textareaWrap[data-mode="report_gen"] {
+  border-color: rgba(76, 227, 138, 0.4);
+}
+.textareaWrap[data-mode="report_rewrite"] {
+  border-color: rgba(255, 200, 80, 0.4);
+}
+
+.textareaWrap:focus-within[data-mode="smart"] {
+  border-color: rgba(103, 209, 255, 0.75);
+}
+.textareaWrap:focus-within[data-mode="report_gen"] {
+  border-color: rgba(76, 227, 138, 0.85);
+}
+.textareaWrap:focus-within[data-mode="report_rewrite"] {
+  border-color: rgba(255, 200, 80, 0.85);
+}
+
+/* Highlight overlay — mirrors textarea geometry exactly */
+.textareaHighlight {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 12px 14px;
+  font-size: inherit;
+  font-family: inherit;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: hidden;
+  pointer-events: none;
+  color: var(--text);
+  border-radius: 8px;
+}
+
+.mentionToken {
+  background: transparent;
+  color: var(--accent);
+}
+
+.mentionTokenPending {
+  background: transparent;
+  color: rgba(103, 209, 255, 0.85);
+}
+
+/* Mention chips row */
+.mentionChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.mentionChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid rgba(76, 227, 138, 0.4);
+  background: rgba(76, 227, 138, 0.08);
+  color: var(--accent);
+  transition: background 0.15s;
+}
+
+.mentionChip:hover {
+  background: rgba(76, 227, 138, 0.16);
+}
+
+/* @ mention dropdown */
+.mentionDropdown {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  background: #0e1c14;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  z-index: 100;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.mentionItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 0.84rem;
+}
+
+.mentionItem:hover,
+.mentionItemActive {
+  background: rgba(76, 227, 138, 0.08);
+}
+
+.mentionIcon {
+  flex-shrink: 0;
+  font-size: 0.9rem;
+}
+
+.mentionName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.mentionCat {
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
 }

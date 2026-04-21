@@ -29,3 +29,4 @@ openclaw:
 ragflow:
   base-url: ${RAGFLOW_BASE_URL:http://localhost:9380}
   api-key: ${RAGFLOW_API_KEY:ragflow-SnZjHK4rZist1vGi-Qya1PBpkO5hXNhPP7WacMIptHY}
+  embedding-model: ${RAGFLOW_EMBEDDING_MODEL:text-embedding-v4@Tongyi-Qianwen}

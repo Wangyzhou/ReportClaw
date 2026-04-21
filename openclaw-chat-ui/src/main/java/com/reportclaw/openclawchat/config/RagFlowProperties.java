@@ -14,6 +14,8 @@ public class RagFlowProperties {
     @NotBlank
     private String apiKey = "";
 
+    private String embeddingModel = "";
+
     public String getBaseUrl() {
         return baseUrl;
     }
@@ -28,5 +30,13 @@ public class RagFlowProperties {
 
     public void setApiKey(String apiKey) {
         this.apiKey = apiKey;
+    }
+
+    public String getEmbeddingModel() {
+        return embeddingModel;
+    }
+
+    public void setEmbeddingModel(String embeddingModel) {
+        this.embeddingModel = embeddingModel;
     }
 }

@@ -175,3 +175,88 @@
   color: var(--accent);
   background: rgba(76, 227, 138, 0.06);
 }
+
+/* Search */
+.searchBar {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  gap: 4px;
+  position: relative;
+}
+
+.searchInput {
+  flex: 1;
+  padding: 8px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  font-size: 0.82rem;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.searchInput:focus {
+  border-color: var(--accent);
+}
+
+.searchInput::placeholder {
+  color: var(--text-dim);
+}
+
+.searchClear {
+  position: absolute;
+  right: 18px;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.searchClear:hover {
+  color: var(--text);
+}
+
+/* Chunk Results */
+.chunkItem {
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.chunkDoc {
+  font-size: 0.75rem;
+  color: var(--accent);
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+
+.chunkContent {
+  font-size: 0.82rem;
+  color: var(--text);
+  line-height: 1.4;
+  margin-bottom: 4px;
+}
+
+.chunkMeta {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+}
+
+.chunkScore {
+  color: var(--accent-3);
+}
+
+/* Error toast */
+.errorToast {
+  padding: 8px 12px;
+  margin: 0 12px 8px;
+  background: rgba(255, 80, 80, 0.12);
+  border: 1px solid rgba(255, 80, 80, 0.3);
+  border-radius: 6px;
+  color: var(--accent-2);
+  font-size: 0.78rem;
+}

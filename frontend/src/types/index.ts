@@ -70,3 +70,37 @@ export interface StreamEvent {
   text?: string
   [key: string]: unknown
 }
+
+export interface RetrievalRequest {
+  question: string
+  categories: string[]
+  topK?: number
+}
+
+export interface ChunkResult {
+  chunkId: string
+  documentName: string
+  content: string
+  score: number
+  datasetId: string
+  documentId: string
+}
+
+export interface RetrievalResponse {
+  chunks: ChunkResult[]
+  total: number
+}
+
+export type ChatMode = 'smart' | 'report_gen' | 'report_rewrite'
+
+export interface MentionedDoc {
+  id: string
+  name: string
+  category: string
+}
+
+export interface ChatPayload {
+  text: string
+  mode: ChatMode
+  mentionedDocs: MentionedDoc[]
+}
