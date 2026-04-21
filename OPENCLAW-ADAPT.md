@@ -3,7 +3,27 @@
 > 分支：`adapt/openclaw-yata`
 > 作者：林宇泰
 > 日期：2026-04-21
-> 目的：把 ReportClaw 的 5 个 Agent 调整到 OpenClaw 原生可加载格式，不再需要王亚洲写适配层
+> 目的：把 ReportClaw 的 5 个 Agent 调整到 OpenClaw 原生可加载格式，并提供安全的同步路径
+
+## ⚠️ 集成模型（读这一节，不要跳过）
+
+**不要**让 `openclaw agents add --workspace` 直接指向 git 仓库里的 `agents/<name>/`。
+实测（2026-04-21 本机 OpenClaw 2026.4.15）：
+
+- `agents add` 时 OpenClaw 用它的默认模板 stub **覆盖** SOUL.md / AGENTS.md / HEARTBEAT.md 等用户文件
+- `agents add` 时 OpenClaw 在 workspace 下 `git init` 了一个嵌套 `.git/`
+- `agents delete` 时 OpenClaw 把**整个 workspace 目录移到废纸篓**（不是只删配置）
+
+所以正确模型是**单向同步**：
+
+```
+git 仓库 (ReportClaw/agents/<x>/)       ← 源头
+          │
+          ▼  rsync --exclude=OpenClaw运行时文件
+~/.openclaw/workspace-reportclaw-<x>/   ← OpenClaw 管理
+```
+
+工具：`scripts/sync_to_openclaw_workspace.py`（见下）
 
 ---
 
@@ -59,7 +79,7 @@ description: "按章节逐一生成内容..."   # 自动从原文首段抽取
 
 ## 2. 改动工具
 
-两个脚本，都幂等可重跑：
+三个脚本，都幂等可重跑：
 
 ```bash
 # 把 skills/<x>.md 转成 skills/<x>/SKILL.md + frontmatter
@@ -70,7 +90,22 @@ python3 scripts/migrate_skills_to_openclaw.py --rollback
 
 # 为子 Agent 补齐 MediaClaw 的 7 件套（已存在的文件绝不覆盖）
 python3 scripts/generate_agent_stubs.py
+
+# 单向同步：git agent 定义 → ~/.openclaw/workspace-reportclaw-<x>/
+# 默认 dry-run，加 --apply 才真同步；--agent <name> 只同步一个
+python3 scripts/sync_to_openclaw_workspace.py
+python3 scripts/sync_to_openclaw_workspace.py --apply
+python3 scripts/sync_to_openclaw_workspace.py --agent coordinator --apply
 ```
+
+同步前置：5 个 OpenClaw agent 必须已经注册并存在对应 workspace 目录。在本机上已经有（`openclaw agents list` 能看到 `reportclaw-coordinator/retriever/writer/rewriter/reviewer`）。王亚洲那边若没有，先跑：
+
+```bash
+for a in coordinator retriever writer rewriter reviewer; do
+  openclaw agents add reportclaw-$a --model minimax/MiniMax-M2.7 --non-interactive
+done
+```
+（**注意不要加 `--workspace` 参数指向 git 目录，让 OpenClaw 自己在 `~/.openclaw/` 下建独立 workspace**；然后再跑 sync 脚本把 git 里的定义拷贝过去。）
 
 ---
 
@@ -112,7 +147,9 @@ master 分支保持王亚洲首次 pull 的状态，没动。
 
 - ✅ `registry.yaml` 34 条 skill 路径 + 10 个 agent 文件路径全部 resolve（Python 脚本校验）
 - ✅ Smoke test 不读 skill 文件（只读 `mocks/`），所以本次改动不影响 `tests/smoke_*.py` 的 7/7 验证
-- 🟡 OpenClaw 实际加载验证 —— 需王亚洲在 Claw 环境里 `git pull adapt/openclaw-yata` 试加载，出错回来一起看
+- ✅ 本机 OpenClaw 2026.4.15 已识别 5 个 `reportclaw-*` agent 注册（`openclaw agents list` 能列出）
+- ✅ 本机 rsync 同步脚本 dry-run 通过：5 个 agent 共 40+ 个文件变更计划，路径格式 `skills/<name>/SKILL.md` 正确
+- 🟡 实际跑一次 agent turn（`openclaw agent --local --agent reportclaw-coordinator -m "..."`）—— 未测，需要 sync --apply + provider auth 就绪
 
 ---
 
