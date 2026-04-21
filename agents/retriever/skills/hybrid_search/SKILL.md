@@ -1,57 +1,47 @@
 ---
 name: hybrid_search
-description: "混合检索：向量检索 + 关键词检索 + RRF 融合 + Rerank。"
+description: "混合检索：调用 ragflow_hybrid_search 工具，支持按 doc_ids 过滤。"
 ---
 
 # Skill — hybrid_search
 
 ## 用途
-混合检索：向量检索 + 关键词检索 + RRF 融合 + Rerank。
+调用 `ragflow_hybrid_search` 工具执行混合检索（向量 + 关键词 + RRF）。
 
-## 输入
+## 工具调用
+
+从 retrieve 子任务的 `payload` 中提取参数，调用 `ragflow_hybrid_search` 工具：
+
 ```json
 {
-  "query": "用户查询或章节主题",
-  "search_scope": {
-    "categories": ["..."],
-    "doc_ids": ["..."],
-    "date_range": ["...", "..."]
-  },
-  "top_k": 10,
-  "rerank": true,
-  "min_relevance": 0.6
+  "question": "<payload.query>",
+  "categories": ["行业报告", "政策法规"],
+  "doc_ids": ["abc123def456..."],
+  "top_k": 10
 }
 ```
 
-## 流程
+参数说明：
+- `question`：检索问题，来自 `payload.query`
+- `categories`：来自 `payload.search_scope.categories`；为空则传所有分类
+- `doc_ids`：来自 `payload.search_scope.doc_ids`；**@mention 的文档 id 必须带上**；为空则不传（搜全库）
+- `top_k`：来自 `payload.top_k`，默认 10
 
-```
-query
-  ├─ 向量检索（BGE-M3 embedding → RAGFlow 向量库）
-  │   └─ 取 top_k * 3 候选
-  ├─ 关键词检索（BM25 / ES / PG FTS）
-  │   └─ 取 top_k * 3 候选
-  ▼
-Reciprocal Rank Fusion
-  公式：score = Σ 1 / (k + rank_i)，k=60
-  ▼
-Rerank（BGE-reranker-v2）
-  对 top_k * 2 条做 cross-encoder 重排
-  ▼
-过滤 min_relevance，取 top_k
-  ▼
-返回 results
-```
+## 工具响应字段映射
 
-## 实现提示
-- **直接调用 RAGFlow API**，不要自己搭向量库。RAGFlow 原生支持混合检索
-- 如果 RAGFlow 的 hybrid 接口不满足，降级为两次单独调用 + 自己 RRF
-- k=60 是 RRF 论文推荐值，不要改
-- Rerank 可选开关，性能差时关掉先跑通
-
-## 输出
-`results` 数组，字段见 soul.md Output Format。
+| 工具返回字段 | 映射到 result 字段 |
+|------------|-----------------|
+| `id` / `chunk_id` | `chunk_id` |
+| `document_keyword` / `document_name` | `source.doc_name` |
+| `content` / `content_with_weight` | `content` |
+| `similarity` / `score` | `relevance_score` |
+| `dataset_id` | `source.dataset_id` |
+| `document_id` / `doc_id` | `source.doc_id` |
 
 ## 边界
 - 知识库为空 → 返回 `results: []` + `coverage_assessment: "低"` + `missing_topics: ["整个知识库为空"]`
-- RAGFlow 超时 → 抛 envelope error，error_code=`RETRIEVAL_TIMEOUT`
+- 工具调用失败 → 抛 envelope error，error_code=`RETRIEVAL_TIMEOUT`
+- `doc_ids` 指定但无命中 → 返回空 results，`missing_topics` 说明原因
+
+## 输出
+`results` 数组，字段见 SOUL.md Output Format。每条结果须经 `source_tracking` skill 补齐 source 字段后返回。

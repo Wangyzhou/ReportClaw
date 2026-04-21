@@ -16,11 +16,17 @@ review_checklist 的 step 1（citation_validity）+ step 2（data_accuracy）。
 ## 流程
 
 ```
-1. 用正则提取报告里所有 [ref:xxx] → citation_list
-2. 对 citation_list 中每个 chunk_id：
-   a. 通过 Coordinator → Retriever 调 RAGFlow 查这个 chunk_id 的 content
-   b. 不存在 → issue(type=citation_error, severity=HIGH, suggested_fix="移除该引用或换为有效 chunk_id")
-   c. 存在 → 进入 step 3
+1. 用正则 [ref:([0-9a-f]{32})] 提取报告里所有引用 → citation_list
+2. 对 citation_list 中每个 chunk_id（去重后批量处理）：
+   a. 调用 ragflow_get_chunk 工具：
+      {
+        "chunk_id": "<chunk_id>",
+        "dataset_id": "<source.dataset_id>",
+        "document_id": "<source.doc_id>"
+      }
+      （dataset_id / document_id 来自 Writer 传入的 citation_index；若无则遍历 payload.retrieval_results 匹配）
+   b. 工具返回空 / 404 → issue(type=citation_error, severity=HIGH, suggested_fix="移除该引用或换为有效 chunk_id")
+   c. 工具返回内容 → 进入 step 3
 3. 数据一致性核验：
    a. 找出该 [ref:xxx] 引用所在的句子
    b. 提取句子里的数据点（数字/百分比/金额）

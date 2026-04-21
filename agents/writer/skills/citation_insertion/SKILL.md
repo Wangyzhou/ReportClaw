@@ -11,13 +11,14 @@ description: "统一所有引用标注格式 `[ref:chunk_id]`，并维护 citati
 ## 引用格式
 
 ```
-正文：根据统计，2025年中国AI市场规模达到3200亿美元 [ref:doc_001_p15_3]，同比增长 28% [ref:doc_001_p15_4]。
+正文：根据统计，2025年中国AI市场规模达到3200亿美元 [ref:d78435d142bd5cf6704da62c778795c5]，同比增长 28% [ref:b48c170e90f70af998485c1065490726]。
 ```
 
 **规范**：
+- chunk_id 必须是 Retriever 返回的 **32 位十六进制字符串**（`^[0-9a-f]{32}$`）
 - 紧跟在被引用的事实/数据之后
 - 在标点符号之前（中文逗号/句号前）
-- 多源支撑同一论断时连写：`...达到3200亿美元 [ref:doc_001_p15_3] [ref:doc_007_p2_1]`
+- 多源支撑同一论断时连写：`...达到3200亿美元 [ref:d78435d142bd5cf6704da62c778795c5] [ref:a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6]`
 
 ## 引用位置规则
 
@@ -34,7 +35,7 @@ description: "统一所有引用标注格式 `[ref:chunk_id]`，并维护 citati
 每次插入引用，更新：
 ```json
 {
-  "doc_001_p15_3": {
+  "d78435d142bd5cf6704da62c778795c5": {
     "used_count": 3,
     "first_section": "1.1",
     "all_sections": ["1.1", "1.2", "3.1"]
@@ -53,7 +54,7 @@ def validate_citations(report_markdown: str, retrieval_results: list) -> dict:
     返回 {valid, invalid_refs, orphan_paragraphs, citation_index}
     """
     allowed_chunk_ids = {r["chunk_id"] for r in retrieval_results}
-    refs = re.findall(r'\[ref:([a-zA-Z0-9_]+)\]', report_markdown)
+    refs = re.findall(r'\[ref:([0-9a-f]{32})\]', report_markdown)
 
     invalid = [r for r in refs if r not in allowed_chunk_ids]
 
@@ -85,42 +86,42 @@ def validate_citations(report_markdown: str, retrieval_results: list) -> dict:
 ### 示例 1：正确引用位置
 
 ```
-✅ 根据统计，2025 年中国 AI 市场规模达到 3200 亿美元 [ref:doc_001_p15_3]，
-同比增长 28% [ref:doc_001_p15_4]，渗透率达 31% [ref:doc_002_p8_1]。
+✅ 根据统计，2025 年中国 AI 市场规模达到 3200 亿美元 [ref:d78435d142bd5cf6704da62c778795c5]，
+同比增长 28% [ref:b48c170e90f70af998485c1065490726]，渗透率达 31% [ref:a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6]。
 ```
 
 ### 示例 2：多源支撑同一论断
 
 ```
-✅ 市场规模突破 3200 亿美元 [ref:doc_001_p15_3] [ref:doc_007_p2_1]。
+✅ 市场规模突破 3200 亿美元 [ref:d78435d142bd5cf6704da62c778795c5] [ref:e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0]。
 ```
 
 ### 示例 3：反例合集
 
 ```
-❌ 2025 年市场规模 [ref:doc_001_p15_3] 达到 3200 亿美元。
+❌ 2025 年市场规模 [ref:d78435d142bd5cf6704da62c778795c5] 达到 3200 亿美元。
    ← 引用不该放在数据前
 
-❌ 根据统计，2025 年 AI 市场规模达到 3200 亿美元。[ref:doc_001_p15_3]
+❌ 根据统计，2025 年 AI 市场规模达到 3200 亿美元。[ref:d78435d142bd5cf6704da62c778795c5]
    ← 引用放在句号后（应在句号前）
 
-❌ [ref:doc_001_p15_3] 根据统计，2025 年市场规模 3200 亿美元。
+❌ [ref:d78435d142bd5cf6704da62c778795c5] 根据统计，2025 年市场规模 3200 亿美元。
    ← 引用放在段首
 
-❌ [来源：doc_001 第15页] 市场规模 3200 亿美元。
+❌ [来源：AI报告 第15页] 市场规模 3200 亿美元。
    ← 格式错误，前端无法解析
 
-❌ 市场规模 3200 亿美元 [ref:doc_001]。
-   ← 缺 page/paragraph
+❌ 市场规模 3200 亿美元 [ref:doc_001_p15_3]。
+   ← 使用了旧格式，不是 RAGFlow 原生 32 位 hex id，Reviewer 反查会失败
 
-❌ 市场规模 3200 亿美元 [ref:doc_001_p15_3] [ref:doc_001_p15_3] [ref:doc_001_p15_3]
+❌ 市场规模 3200 亿美元 [ref:d78435d142bd5cf6704da62c778795c5] [ref:d78435d142bd5cf6704da62c778795c5] [ref:d78435d142bd5cf6704da62c778795c5]
    ← 同 chunk 堆砌
 ```
 
 ## 反例（规则总结）
 
-- ❌ `[来源：doc_001 第15页]`（前端无法解析）
-- ❌ `[ref:doc_001]`（缺 page 和 paragraph）
+- ❌ `[来源：AI报告 第15页]`（前端无法解析）
+- ❌ `[ref:doc_001_p15_3]`（旧格式，不是 32 位 hex，Reviewer 会报 format_error）
 - ❌ 引用放在段首（语义不清）
 - ❌ 同一个 chunk_id 在同一段内重复 5+ 次（堆砌）
 - ❌ 引用放在中文句号/逗号后（应在标点前）
