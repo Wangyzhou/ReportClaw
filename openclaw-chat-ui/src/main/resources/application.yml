@@ -1,0 +1,31 @@
+server:
+  port: ${SERVER_PORT:8080}
+
+spring:
+  application:
+    name: openclaw-chat-ui
+  jackson:
+    default-property-inclusion: non_null
+  threads:
+    virtual:
+      enabled: true
+
+openclaw:
+  gateway-url: ${OPENCLAW_GATEWAY_URL:ws://192.168.4.188:18789}
+  gateway-token: ${OPENCLAW_GATEWAY_TOKEN:}
+  explicit-device-token: ${OPENCLAW_DEVICE_TOKEN:}
+  default-session-key: ${OPENCLAW_SESSION_KEY:agent:main:main}
+  device-state-dir: ${OPENCLAW_DEVICE_STATE_DIR:../examples/openclaw-gateway-ws/.runtime}
+  client-id: ${OPENCLAW_CLIENT_ID:cli}
+  client-version: ${OPENCLAW_CLIENT_VERSION:0.1.0}
+  platform: ${OPENCLAW_PLATFORM:windows}
+  device-family: ${OPENCLAW_DEVICE_FAMILY:desktop}
+  locale: ${OPENCLAW_LOCALE:zh-CN}
+  user-agent: ${OPENCLAW_USER_AGENT:openclaw-spring-ui/0.1.0}
+  prefer-stored-device-token: ${OPENCLAW_PREFER_DEVICE_TOKEN:true}
+  connect-timeout: 20s
+  read-timeout: 5m
+
+ragflow:
+  base-url: ${RAGFLOW_BASE_URL:http://localhost:9380}
+  api-key: ${RAGFLOW_API_KEY:ragflow-SnZjHK4rZist1vGi-Qya1PBpkO5hXNhPP7WacMIptHY}

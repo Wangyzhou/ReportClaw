@@ -1,0 +1,14 @@
+examples/openclaw-gateway-ws/.runtime/
+openclaw-chat-ui/.build/
+openclaw-chat-ui/target/
+openclaw-chat-ui/.m2/
+openclaw-chat-ui/.idea/
+.idea/
+
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+.playwright-mcp/
+*.png
+*.log
