@@ -118,7 +118,7 @@ knowledge_base:
   reranker: bge-reranker-v2
   endpoint: "http://localhost:9380"   # 占位，王亚洲填实际地址
   datasets:
-    policies: 政策法规
-    industry_reports: 行业报告
-    historical_reports: 历史报告
-    media_news: 媒体资讯
+    reportclaw_policy: 政策法规
+    reportclaw_industry: 行业报告
+    reportclaw_history: 历史报告
+    reportclaw_media: 媒体资讯
