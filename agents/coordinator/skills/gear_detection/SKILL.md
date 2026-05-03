@@ -38,10 +38,38 @@ description: 任务复杂度自动判档。G1/G2/G3 三档决定 Coordinator 走
 | 用户指定 > 3000 字 | 倾向 G3 |
 | 未指定长度 | 默认 G2 |
 | 涉及多个知识库分类 | +1 级 |
-| 涉及仿写参考稿 | 强制 G3 |
-| 涉及内容扩展 | 强制 G3 |
+| 涉及仿写参考稿（`style_conversion` / 仿写） | 强制 G3 |
+| 涉及内容扩展（`content_expansion` / 扩写） | 强制 G3 |
+| 涉及视角调整（`perspective_shift` / 换视角） | 强制 G3 |
 
 ### 最终档位 = max(意图档, 长度档, 强制升档)
+
+**🔒 硬规则优先级**（从高到低）：
+
+1. **强制 G3 类型**（`style_conversion` / `content_expansion` / `perspective_shift`）→ **直接 G3**，**任何字数都不降级**（这三种 sub_mode 的复杂度内禀，跟字数无关）。
+2. **明确字数 hard cap/floor**（仅当不命中规则 1 时生效）：
+   - 用户**明确说出小于 3000 字的字数**（如"2500 字"、"1500 字"、"2000 字左右"）→ **强制 gear = G2**，**不允许关键词把它推到 G3**。
+   - 用户**明确说出大于等于 3000 字的字数**（如"5000 字"、"8000 字"、"3000 字左右"）→ **强制 gear ≥ G3**。
+3. **默认规则**（无字数 + 不命中强制 G3 类型）：max(意图档, 长度档默认G2, +1级 升档)。
+
+**判档伪代码**（按此顺序短路）：
+
+```
+if intent == rewrite_report and sub_mode in {perspective_shift, content_expansion, style_conversion}:
+    return G3     # 终结，无视字数和其他信号
+if 用户明确字数 < 3000:
+    return G2     # 终结，关键词不再升档
+if 用户明确字数 >= 3000:
+    return max(G3, 强制升档)
+return max(意图档, 长度档默认G2, +1级 升档)
+```
+
+**举例**：
+- "写一份 2500 字的中国 AI 产业概览报告" → 不是 rewrite，命中字数 hard cap → **G2**
+- "把这份报告改成投资人视角"（未指定字数）→ rewrite_report / perspective_shift → **G3**（不被字数缺失影响）
+- "写一份深度 AI 产业报告"（未指定字数）→ 默认 G2 + 关键词"深度" + "报告" → G3
+- "写一份 8000 字 AI 行业研究" → hard floor → G3
+- "帮我改个数据"（未指定字数 + 关键词"改数据" / `data_update`）→ G2（不在强制 G3 三种 sub_mode 内）
 
 ---
 
@@ -54,11 +82,13 @@ description: 任务复杂度自动判档。G1/G2/G3 三档决定 Coordinator 走
 
 ---
 
-## 输出格式
+## 内部判档结果（仅供 task_dispatch 读取，不要单独输出给用户/runtime）
 
-judge 完成后，写入 SESSION-STATE.md：
+> ⚠️ **本节示例仅说明判档结果的字段含义**。Coordinator 的实际输出**只有 task_dispatch SKILL.md 里的 dispatch payload JSON**，judge 结果会作为 `gear` 字段**嵌入** dispatch payload（不要单独输出 yaml/json gear-only 块）。
 
-```yaml
+判档心算结构（不要直接写到对外输出）：
+
+```
 gear: G2
 rationale: 用户要求生成 2500 字短报告 + 简单数据更新，单主题单分类
 allow_upgrade: true   # 如果 Retriever coverage=低，可升级到 G3 扩搜
@@ -124,16 +154,16 @@ allow_upgrade: true   # 如果 Retriever coverage=低，可升级到 G3 扩搜
 
 ---
 
-## 输出示例
+## 判档心算结构示例（不是对外输出 — 仅供推理时心算字段含义）
 
-```json
-{
-  "gear": "G2",
-  "rationale": "数据更新模式 + 目标 2500 字短报告",
-  "agents_to_dispatch": ["retriever", "rewriter", "reviewer"],
-  "review_rounds_cap": 1,
-  "parallel_retrieval": false,
-  "allow_upgrade_to_g3": true,
-  "upgrade_triggers": ["retriever_low_coverage", "reviewer_high_severity"]
-}
-```
+⛔ **此示例不要复制到对话输出**。Coordinator 对外的唯一 JSON 是 task_dispatch 的 dispatch payload（`{"intent": ..., "gear": ..., "subtasks": [...]}`），其中 `gear` 字段就是这里 judge 出来的结果。
+
+下面字段是判档时**内心要明确的项**（不要单独输出一个 gear-only JSON 块，否则会和 dispatch payload JSON 重复，前端解析失败）：
+
+- `gear`: G1/G2/G3 之一
+- `rationale`: 一句话解释（嵌入 dispatch payload 时可省略）
+- `agents_to_dispatch`: 派往哪几个 agent（这个映射到 dispatch payload.subtasks 里的 to_agent）
+- `review_rounds_cap`: 1 或 2（嵌入 dispatch payload.max_review_rounds）
+- `parallel_retrieval`: bool（是否并行检索）
+- `allow_upgrade_to_g3`: bool（是否允许动态升级）
+- `upgrade_triggers`: 升级触发条件数组
