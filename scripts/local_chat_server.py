@@ -140,19 +140,54 @@ def load_chunks():
     )
 
 
-# DeepSeek 价格 (per 1M tokens, USD)
-DS_INPUT_PRICE = 0.28 / 1_000_000
-DS_OUTPUT_PRICE = 0.42 / 1_000_000
+# 价格从 OpenClaw 配置真读（不 hardcode，跟 OpenClaw runtime 同步）
+def _load_pricing():
+    """从 ~/.openclaw/openclaw.json 真读 deepseek-chat 价格。"""
+    try:
+        cfg = json.loads((Path.home() / ".openclaw/openclaw.json").read_text())
+        ds_models = cfg["models"]["providers"]["deepseek"]["models"]
+        for m in ds_models:
+            if m["id"] == "deepseek-chat":
+                c = m["cost"]
+                return {
+                    "input": c["input"] / 1_000_000,
+                    "output": c["output"] / 1_000_000,
+                    "cache_read": c.get("cacheRead", c["input"]) / 1_000_000,
+                }
+    except Exception as e:
+        print(f"[pricing] OpenClaw 配置读失败 fallback hardcode: {e}", file=sys.stderr)
+    # fallback: DeepSeek 公开标准价
+    return {"input": 0.28e-6, "output": 0.42e-6, "cache_read": 0.028e-6}
+
+
+# Claude Sonnet 4.6 公开价格（Anthropic 官网）— 仅用于 cost 对比 baseline
+CLAUDE_SONNET_4_6_INPUT = 3 / 1_000_000
+CLAUDE_SONNET_4_6_OUTPUT = 15 / 1_000_000
+
+DS_PRICING = _load_pricing()
 
 
 def _usage_dict(msg) -> dict:
-    """从 msg.usage 抽 token + cost dict（兼容 shim 的 _Usage 结构）。"""
+    """从 msg.usage 抽 token + 真实 cost dict（含 DeepSeek cache hit 折扣）。"""
     inp = getattr(msg.usage, "input_tokens", 0)
     out = getattr(msg.usage, "output_tokens", 0)
+    cache_hit = getattr(msg.usage, "cache_hit_tokens", 0)
+    cache_miss = getattr(msg.usage, "cache_miss_tokens", inp - cache_hit)
+    # 真实 cost: cache hit tokens 走 cache_read 价格（10x 便宜），miss 走标价
+    cost = (
+        cache_miss * DS_PRICING["input"]
+        + cache_hit * DS_PRICING["cache_read"]
+        + out * DS_PRICING["output"]
+    )
+    # Claude Sonnet 4.6 等价（理论 baseline，不做 cache 折扣，按 Anthropic 标价）
+    claude_eq = inp * CLAUDE_SONNET_4_6_INPUT + out * CLAUDE_SONNET_4_6_OUTPUT
     return {
         "input_tokens": inp,
         "output_tokens": out,
-        "cost_usd": round(inp * DS_INPUT_PRICE + out * DS_OUTPUT_PRICE, 6),
+        "cache_hit_tokens": cache_hit,
+        "cache_miss_tokens": cache_miss,
+        "cost_usd": round(cost, 6),
+        "claude_equivalent_usd": round(claude_eq, 6),
     }
 
 
@@ -285,23 +320,32 @@ class ChatHandler(BaseHTTPRequestHandler):
             client = Anthropic()
             print(f"[chat] message={message!r}", file=sys.stderr)
 
-            # 累计成本 + token
+            # 累计成本 + token (真实 DeepSeek 计费 + cache hit 折扣)
             total_cost = 0.0
+            total_claude_eq = 0.0
             total_input = 0
             total_output = 0
+            total_cache_hit = 0
 
             def add_usage(label: str, usage: dict):
-                nonlocal total_cost, total_input, total_output
+                nonlocal total_cost, total_claude_eq, total_input, total_output, total_cache_hit
                 total_cost += usage["cost_usd"]
+                total_claude_eq += usage["claude_equivalent_usd"]
                 total_input += usage["input_tokens"]
                 total_output += usage["output_tokens"]
-                # emit 单步成本
+                total_cache_hit += usage["cache_hit_tokens"]
+                cache_pct = (
+                    f" · cache hit {usage['cache_hit_tokens']}/{usage['input_tokens']}"
+                    if usage["cache_hit_tokens"] > 0
+                    else ""
+                )
+                # emit 单步真实 cost
                 emit({
                     "type": "activity",
                     "kind": "tool_result",
                     "name": label,
-                    "title": f"💰 {label} · in={usage['input_tokens']} out={usage['output_tokens']} · ${usage['cost_usd']:.4f}",
-                    "text": f"模型: deepseek-chat · 累计 ${total_cost:.4f}",
+                    "title": f"💰 {label} · in={usage['input_tokens']} out={usage['output_tokens']}{cache_pct} · ${usage['cost_usd']:.5f}",
+                    "text": f"模型: deepseek-chat (真实 API 计费)\n本步: ${usage['cost_usd']:.5f} · 累计 ${total_cost:.5f}\nCache hit: {usage['cache_hit_tokens']} tokens ({usage['cache_hit_tokens'] * DS_PRICING['cache_read']:.5f} USD @cache_read) / miss: {usage['cache_miss_tokens']} (@input)\nClaude Sonnet 4.6 同等 token 等价: ${usage['claude_equivalent_usd']:.5f} ({usage['claude_equivalent_usd'] / max(usage['cost_usd'], 1e-9):.1f}x 节省)",
                     "itemId": f"cost-{label.lower()}",
                 })
 
@@ -411,13 +455,15 @@ class ChatHandler(BaseHTTPRequestHandler):
             })
             task_update("t3-review", "reviewer", "completed" if verdict == "pass" else "failed")
 
-            # 链路完成 — 总成本 summary
+            # 链路完成 — 总成本 summary (真实 DeepSeek API 计费)
+            savings = total_claude_eq / max(total_cost, 1e-9)
+            cache_ratio = (total_cache_hit / max(total_input, 1)) * 100
             emit({
                 "type": "activity",
                 "kind": "tool_result",
                 "name": "ReportClaw",
-                "title": f"💰 本轮总成本 ${total_cost:.4f} · {total_input + total_output} tokens (in {total_input} / out {total_output})",
-                "text": f"模型: deepseek-chat\n3 次 LLM 调用 · {gear} 链路\n等价 Claude Sonnet 4.6 成本: ${(total_input * 3 + total_output * 15) / 1_000_000:.4f} (10x 节省)",
+                "title": f"💰 本轮真实总成本 ${total_cost:.5f} · {total_input + total_output} tokens · {savings:.1f}x 节省 vs Claude",
+                "text": f"模型: deepseek-chat (3 次 LLM 调用 · {gear} 链路)\n真实 token: in {total_input} / out {total_output}\nCache hit ratio: {cache_ratio:.1f}% ({total_cache_hit} tokens 走 ${DS_PRICING['cache_read'] * 1e6:.3f}/M 折扣价)\nDeepSeek 真实计费: ${total_cost:.5f}\nClaude Sonnet 4.6 等价计费: ${total_claude_eq:.5f}\n节省倍数: {savings:.1f}x\n\n价格源: ~/.openclaw/openclaw.json deepseek 配置\nClaude baseline: Anthropic 官方 $3/M input + $15/M output (sonnet-4-6 标价)",
                 "itemId": "total-cost",
             })
             emit({"type": "done", "runId": run_id})

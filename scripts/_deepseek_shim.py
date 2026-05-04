@@ -38,14 +38,25 @@ class _TextBlock:
 
 
 class _Usage:
-    """对应 anthropic.types.Usage（input_tokens / output_tokens）。"""
+    """对应 anthropic.types.Usage。
 
-    def __init__(self, input_tokens: int = 0, output_tokens: int = 0):
+    DeepSeek 真返回字段（已映射到 Anthropic 兼容 + 自有扩展）：
+      prompt_tokens          → input_tokens (total)
+      completion_tokens      → output_tokens
+      prompt_cache_hit_tokens   → cache_read_input_tokens (10x 便宜价格)
+      prompt_cache_miss_tokens  → input_tokens 减去 hit 后的部分（标价）
+    """
+
+    def __init__(self, input_tokens: int = 0, output_tokens: int = 0,
+                 cache_hit_tokens: int = 0, cache_miss_tokens: int = 0):
         self.input_tokens = input_tokens
         self.output_tokens = output_tokens
-        # Anthropic 还有 cache_creation_input_tokens / cache_read_input_tokens
+        # Anthropic 接口名（前端如直接读 anthropic 字段）
         self.cache_creation_input_tokens = 0
-        self.cache_read_input_tokens = 0
+        self.cache_read_input_tokens = cache_hit_tokens
+        # 自有扩展（DeepSeek 真有的字段）
+        self.cache_hit_tokens = cache_hit_tokens
+        self.cache_miss_tokens = cache_miss_tokens
 
 
 class _Message:
@@ -59,9 +70,15 @@ class _Message:
         self.model = model
         self.stop_reason = "end_turn"
         self.stop_sequence: Optional[str] = None
+        # DeepSeek 真返回 prompt_cache_hit_tokens / prompt_cache_miss_tokens — 取这俩
+        prompt_total = int(usage.get("prompt_tokens", 0))
+        cache_hit = int(usage.get("prompt_cache_hit_tokens", 0))
+        cache_miss = int(usage.get("prompt_cache_miss_tokens", prompt_total - cache_hit))
         self.usage = _Usage(
-            input_tokens=int(usage.get("prompt_tokens", 0)),
+            input_tokens=prompt_total,
             output_tokens=int(usage.get("completion_tokens", 0)),
+            cache_hit_tokens=cache_hit,
+            cache_miss_tokens=cache_miss,
         )
 
 
