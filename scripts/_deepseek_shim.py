@@ -89,19 +89,19 @@ class _Message:
 
 # Claude 模型名 → DeepSeek 模型名的映射（quick_verify.sh 用 claude-sonnet-4-6）
 _MODEL_MAP = {
-    "claude-sonnet-4-6": "deepseek-chat",
-    "claude-opus-4-5": "deepseek-reasoner",
-    "claude-haiku-4-5": "deepseek-chat",
-    # 任何 claude-* 默认回落到 deepseek-chat
+    "claude-sonnet-4-6": "deepseek-v4-pro",
+    "claude-opus-4-5": "deepseek-v4-pro",
+    "claude-haiku-4-5": "deepseek-v4-pro",
+    # 任何 claude-* 默认回落到 V4-Pro（深度思考 + 长链路）
 }
 
 
 def _map_model(model: str) -> str:
     if model in _MODEL_MAP:
         return _MODEL_MAP[model]
-    # 任何 claude-* 默认 deepseek-chat
+    # 任何 claude-* 默认 V4-Pro
     if model.startswith("claude-"):
-        return "deepseek-chat"
+        return "deepseek-v4-pro"
     # 已是 deepseek-* 直接传
     return model
 

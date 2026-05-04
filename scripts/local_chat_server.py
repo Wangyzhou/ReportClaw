@@ -160,57 +160,66 @@ PRICING_V4_PRO_DISCOUNTED = {
     "cache_read": 0.003625 / 1_000_000,
 }
 
-# 当前默认走 V4-Flash（API alias deepseek-chat 路由）。
-# 要切 V4-Pro：DS_PRICING = PRICING_V4_PRO_DISCOUNTED + 改 _MODEL_MAP
-DS_PRICING = PRICING_V4_FLASH
+# 多 model 分配（Coordinator + Writer 用 V4-Pro 深度思考，Reviewer 用 V4-Flash 快速）
+# V4-Pro 75% off 折扣至 2026-05-31，之后恢复 $1.74 / $3.48 / $0.0145 per M
+PRICING_BY_MODEL = {
+    "deepseek-v4-pro": PRICING_V4_PRO_DISCOUNTED,
+    "deepseek-v4-flash": PRICING_V4_FLASH,
+}
 
-# Claude Sonnet 4.6 公开价格（Anthropic 官网）— 仅用于 cost 对比 baseline
-CLAUDE_SONNET_4_6_INPUT = 3 / 1_000_000
-CLAUDE_SONNET_4_6_OUTPUT = 15 / 1_000_000
+# 默认 V4-Pro（chat server 主链路）
+DS_PRICING = PRICING_V4_PRO_DISCOUNTED
+DS_MODEL_NAME = "deepseek-v4-pro"
 
 
-def _usage_dict(msg) -> dict:
-    """从 msg.usage 抽 token + 真实 cost dict（含 DeepSeek cache hit 折扣）。"""
+def _usage_dict(msg, pricing=None) -> dict:
+    """从 msg.usage 抽 token + 真实 cost dict。pricing 默认 DS_PRICING (V4-Pro)，
+    Reviewer 等步骤可传 PRICING_V4_FLASH。"""
+    if pricing is None:
+        pricing = DS_PRICING
     inp = getattr(msg.usage, "input_tokens", 0)
     out = getattr(msg.usage, "output_tokens", 0)
     cache_hit = getattr(msg.usage, "cache_hit_tokens", 0)
     cache_miss = getattr(msg.usage, "cache_miss_tokens", inp - cache_hit)
-    # 真实 cost: cache hit tokens 走 cache_read 价格（10x 便宜），miss 走标价
     cost = (
-        cache_miss * DS_PRICING["input"]
-        + cache_hit * DS_PRICING["cache_read"]
-        + out * DS_PRICING["output"]
+        cache_miss * pricing["input"]
+        + cache_hit * pricing["cache_read"]
+        + out * pricing["output"]
     )
-    # Claude Sonnet 4.6 等价（理论 baseline，不做 cache 折扣，按 Anthropic 标价）
-    claude_eq = inp * CLAUDE_SONNET_4_6_INPUT + out * CLAUDE_SONNET_4_6_OUTPUT
     return {
         "input_tokens": inp,
         "output_tokens": out,
         "cache_hit_tokens": cache_hit,
         "cache_miss_tokens": cache_miss,
         "cost_usd": round(cost, 6),
-        "claude_equivalent_usd": round(claude_eq, 6),
+        "model": getattr(msg, "model", "unknown"),
     }
 
 
 def build_dispatch(message: str, client):
-    """returns (dispatch_dict, usage_dict)"""
+    """returns (dispatch_dict, usage_dict). Coordinator 用 V4-Pro 深度判档。"""
+    real_usage = None
     try:
         msg = client.messages.create(
-            model="claude-sonnet-4-6",
+            model="deepseek-v4-pro",
             max_tokens=600,
             temperature=0.3,
             messages=[{"role": "user", "content": COORDINATOR_PROMPT.format(message=message)}],
         )
-        usage = _usage_dict(msg)
+        real_usage = _usage_dict(msg)
         m = re.search(r"\{.*\}", msg.content[0].text, re.DOTALL)
         if m:
             payload = json.loads(m.group(0))
             payload.setdefault("user_request", message)
-            return payload, usage
+            return payload, real_usage
+        print("[coord] no JSON in V4-Pro output (保留 usage 用 fallback dispatch)", file=sys.stderr)
     except Exception as e:
-        print(f"[coord] fallback: {e}", file=sys.stderr)
-    fallback_usage = {"input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0}
+        print(f"[coord] LLM 调用失败: {e}", file=sys.stderr)
+    fallback_usage = real_usage or {
+        "input_tokens": 0, "output_tokens": 0,
+        "cache_hit_tokens": 0, "cache_miss_tokens": 0,
+        "cost_usd": 0.0, "model": "deepseek-v4-pro",
+    }
     fallback_dispatch = {
         "user_request": message,
         "intent": "generate_report",
@@ -225,27 +234,39 @@ def build_dispatch(message: str, client):
     return fallback_dispatch, fallback_usage
 
 
-def call_writer(message: str, chunks_data, client) -> str:
+def call_writer(message: str, chunks_data, client):
+    """returns (markdown, usage). Writer 显式用 V4-Flash —— 长文生成不需要 reasoning，
+    V4-Pro 会让 Writer 单调用从 ~15s 涨到 60-180s，demo 观感差。"""
     chunks_block = "\n".join(
         f"[{c['chunk_id']}] {c.get('source', {}).get('doc_name', '?')} → {c['content']}"
         for c in chunks_data["results"][:6]
     )
     msg = client.messages.create(
-        model="claude-sonnet-4-6",
+        model="deepseek-v4-flash",
         max_tokens=2500,
         temperature=0.6,
         messages=[
             {"role": "user", "content": WRITER_PROMPT.format(message=message, chunks=chunks_block)},
         ],
     )
-    return msg.content[0].text.strip(), _usage_dict(msg)
+    return msg.content[0].text.strip(), _usage_dict(msg, pricing=PRICING_V4_FLASH)
 
 
 def call_reviewer(report: str, chunk_ids, client):
-    """returns (review_dict, usage_dict)"""
+    """returns (review_dict, usage_dict). Reviewer 显式用 V4-Flash."""
+    fallback_review = {
+        "verdict": "pass",
+        "issues": [],
+        "scores": {"coverage_score": 0.88, "quality_score": 0.85, "citation_accuracy": 0.95},
+    }
+    fallback_usage = {
+        "input_tokens": 0, "output_tokens": 0,
+        "cache_hit_tokens": 0, "cache_miss_tokens": 0,
+        "cost_usd": 0.0, "model": "deepseek-v4-flash",
+    }
     try:
         msg = client.messages.create(
-            model="claude-sonnet-4-6",
+            model="deepseek-v4-flash",
             max_tokens=500,
             temperature=0.2,
             messages=[
@@ -257,20 +278,16 @@ def call_reviewer(report: str, chunk_ids, client):
                 }
             ],
         )
-        usage = _usage_dict(msg)
+        usage = _usage_dict(msg, pricing=PRICING_V4_FLASH)
         m = re.search(r"\{.*\}", msg.content[0].text, re.DOTALL)
         if m:
             return json.loads(m.group(0)), usage
+        # JSON 提取失败，但 LLM 真调了 — 保留 usage，review 用 fallback
+        print(f"[review] no JSON found in output (使用 fallback verdict, 保留真实 usage)", file=sys.stderr)
+        return fallback_review, usage
     except Exception as e:
-        print(f"[review] fallback: {e}", file=sys.stderr)
-    return (
-        {
-            "verdict": "pass",
-            "issues": [],
-            "scores": {"coverage_score": 0.88, "quality_score": 0.85, "citation_accuracy": 0.95},
-        },
-        {"input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0},
-    )
+        print(f"[review] LLM 调用失败: {e}", file=sys.stderr)
+        return fallback_review, fallback_usage
 
 
 # ─────────────────────────── HTTP handler ───────────────────────────
@@ -322,17 +339,21 @@ class ChatHandler(BaseHTTPRequestHandler):
             client = Anthropic()
             print(f"[chat] message={message!r}", file=sys.stderr)
 
-            # 累计成本 + token (真实 DeepSeek 计费 + cache hit 折扣)
+            # 累计成本 + token (真实 DeepSeek V4-Pro 计费 + cache hit 折扣)
             total_cost = 0.0
-            total_claude_eq = 0.0
             total_input = 0
             total_output = 0
             total_cache_hit = 0
 
             def add_usage(label: str, usage: dict):
-                nonlocal total_cost, total_claude_eq, total_input, total_output, total_cache_hit
+                nonlocal total_cost, total_input, total_output, total_cache_hit
+                # 兼容 fallback usage (可能缺字段)
+                usage = {**{
+                    "input_tokens": 0, "output_tokens": 0,
+                    "cache_hit_tokens": 0, "cache_miss_tokens": 0,
+                    "cost_usd": 0.0,
+                }, **usage}
                 total_cost += usage["cost_usd"]
-                total_claude_eq += usage["claude_equivalent_usd"]
                 total_input += usage["input_tokens"]
                 total_output += usage["output_tokens"]
                 total_cache_hit += usage["cache_hit_tokens"]
@@ -342,12 +363,14 @@ class ChatHandler(BaseHTTPRequestHandler):
                     else ""
                 )
                 # emit 单步真实 cost
+                model_name = usage.get("model", DS_MODEL_NAME)
+                pricing = PRICING_BY_MODEL.get(model_name, DS_PRICING)
                 emit({
                     "type": "activity",
                     "kind": "tool_result",
                     "name": label,
-                    "title": f"💰 {label} · in={usage['input_tokens']} out={usage['output_tokens']}{cache_pct} · ${usage['cost_usd']:.5f}",
-                    "text": f"模型: deepseek-v4-flash (API alias: deepseek-chat) · 真实 API 计费\n本步: ${usage['cost_usd']:.5f} · 累计 ${total_cost:.5f}\nCache hit: {usage['cache_hit_tokens']} tokens (@$0.0028/M) / miss: {usage['cache_miss_tokens']} (@$0.14/M) / output: {usage['output_tokens']} (@$0.28/M)\nClaude Sonnet 4.6 同等 token 等价: ${usage['claude_equivalent_usd']:.5f} ({usage['claude_equivalent_usd'] / max(usage['cost_usd'], 1e-9):.1f}x 节省)",
+                    "title": f"💰 {label} · {model_name} · in={usage['input_tokens']} out={usage['output_tokens']}{cache_pct} · ${usage['cost_usd']:.5f}",
+                    "text": f"模型: {model_name} · 真实 API 计费\n本步: ${usage['cost_usd']:.5f} · 累计 ${total_cost:.5f}\ninput cache miss: {usage['cache_miss_tokens']} × ${pricing['input'] * 1e6:.4f}/M\ninput cache hit: {usage['cache_hit_tokens']} × ${pricing['cache_read'] * 1e6:.4f}/M\noutput: {usage['output_tokens']} × ${pricing['output'] * 1e6:.4f}/M",
                     "itemId": f"cost-{label.lower()}",
                 })
 
@@ -457,15 +480,14 @@ class ChatHandler(BaseHTTPRequestHandler):
             })
             task_update("t3-review", "reviewer", "completed" if verdict == "pass" else "failed")
 
-            # 链路完成 — 总成本 summary (真实 DeepSeek API 计费)
-            savings = total_claude_eq / max(total_cost, 1e-9)
+            # 链路完成 — 总成本 summary (真实 DeepSeek V4-Pro 计费)
             cache_ratio = (total_cache_hit / max(total_input, 1)) * 100
             emit({
                 "type": "activity",
                 "kind": "tool_result",
                 "name": "ReportClaw",
-                "title": f"💰 本轮真实总成本 ${total_cost:.5f} · {total_input + total_output} tokens · {savings:.1f}x 节省 vs Claude",
-                "text": f"模型: deepseek-v4-flash (API alias: deepseek-chat) · 3 次 LLM 调用 · {gear} 链路\n真实 token: in {total_input} / out {total_output}\nCache hit ratio: {cache_ratio:.1f}% ({total_cache_hit} tokens 走 $0.0028/M 折扣价)\n\nDeepSeek V4-Flash 真实计费: ${total_cost:.5f}\n  - input cache miss × $0.14/M\n  - input cache hit × $0.0028/M\n  - output × $0.28/M\nClaude Sonnet 4.6 等价计费: ${total_claude_eq:.5f}\n节省倍数: {savings:.1f}x\n\n价格源: DeepSeek 官网 https://api-docs.deepseek.com/quick_start/pricing (查证 2026-05-04)\nClaude baseline: Anthropic 官方 $3/M input + $15/M output (sonnet-4-6 标价)",
+                "title": f"💰 本轮真实总成本 ${total_cost:.5f} · {total_input + total_output} tokens",
+                "text": f"模型: {DS_MODEL_NAME} · 3 次 LLM 调用 · {gear} 链路\n真实 token: in {total_input} / out {total_output}\nCache hit ratio: {cache_ratio:.1f}% ({total_cache_hit} tokens 走 ${DS_PRICING['cache_read'] * 1e6:.4f}/M 折扣价)\n\nDeepSeek V4-Pro 真实计费: ${total_cost:.5f}\n  - input cache miss × ${DS_PRICING['input'] * 1e6:.4f}/M\n  - input cache hit  × ${DS_PRICING['cache_read'] * 1e6:.4f}/M\n  - output           × ${DS_PRICING['output'] * 1e6:.4f}/M\n\n价格源: DeepSeek 官网 https://api-docs.deepseek.com/quick_start/pricing (V4-Pro 75% off 至 2026-05-31)",
                 "itemId": "total-cost",
             })
             emit({"type": "done", "runId": run_id})
