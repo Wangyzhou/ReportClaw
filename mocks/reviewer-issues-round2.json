@@ -1,0 +1,15 @@
+{
+  "_mock_scenario": "Reviewer 第 2 轮审查：Writer 按 round1 issues 修订后，所有 HIGH 问题已修复，verdict=pass",
+  "_input_was": "Writer 基于 reviewer-issues-round1.json 的 issues 修订后的 round-2 草稿（已删除未支撑的 23% 论断 + 把医疗 18% 改回 21%）",
+  "_used_for": "M6 review-loop smoke：验证 Coordinator 在第 2 轮 reviewer pass 后正常出最终交付，不再走第 3 轮（max_review_rounds=2 上限）",
+  "verdict": "pass",
+  "issues": [],
+  "scores": {
+    "coverage_score": 0.9,
+    "quality_score": 0.85,
+    "citation_accuracy": 0.95
+  },
+  "retry_recommended": false,
+  "rounds_used": 2,
+  "_note": "对应 round1 的 2 个 HIGH issue 已修复：issue_001 已删除无支撑论断；issue_002 已把医疗 18% 改回 21%。coverage 从 0.7→0.9（修订时未引入新空洞），quality 0.6→0.85，citation_accuracy 0.85→0.95。"
+}

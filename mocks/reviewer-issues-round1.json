@@ -1,0 +1,40 @@
+{
+  "_mock_scenario": "Reviewer 第 1 轮审查 writer-expected-output.md，发现 2 个 HIGH 问题，需 Writer 修订进入第 2 轮",
+  "_input_was": "writer-expected-output.md 假设为第 1 轮 Writer 草稿（其中 1.1 节市场规模引用错位 + 三、垂直场景数据描述与原文不符）",
+  "_used_for": "M6 review-loop smoke：模拟 Coordinator 收到 needs_revision 后须把 issues 注入 Writer round=2 的 revision_context",
+  "verdict": "needs_revision",
+  "issues": [
+    {
+      "id": "issue_001",
+      "type": "citation_error",
+      "location": {
+        "section": "1.1 市场规模与增速",
+        "line_range": [10, 10],
+        "citation_id": "doc_001_p15_3"
+      },
+      "detail": "正文陈述'市场规模占全球 AI 总规模的约 23%'未在引用 chunk doc_001_p15_3 中显式出现，疑似从同段其他 chunk 推断。第 1 轮要求 Writer 用更精确的引用支撑该数据，或改写为引用涵盖范围内的表述。",
+      "severity": "HIGH",
+      "suggested_fix": "把'占全球 AI 总规模的约 23%' 这一论断要么删除，要么补一条新检索的 chunk 引用支撑（例如 doc_001 后半页或新 doc）"
+    },
+    {
+      "id": "issue_002",
+      "type": "data_mismatch",
+      "location": {
+        "section": "三、垂直场景分化",
+        "line_range": [22, 22],
+        "citation_id": "doc_007_p4_2"
+      },
+      "detail": "正文'金融领域 38%' 与引用 chunk doc_007_p4_2 原文 '金融领域 38%' 一致；但'医疗领域仅 21%' 在写作中被截尾误写为 18%。本轮第 1 次发现该数据偏差，要求改回 21%。",
+      "severity": "HIGH",
+      "suggested_fix": "把第三章'医疗领域仅 18%' 的写法改回原文 '医疗领域仅 21%'"
+    }
+  ],
+  "scores": {
+    "coverage_score": 0.7,
+    "quality_score": 0.6,
+    "citation_accuracy": 0.85
+  },
+  "retry_recommended": true,
+  "rounds_used": 1,
+  "_note": "2 个 HIGH issue 触发回环（gear_detection 升档规则: G2 + reviewer HIGH → G3 走第 2 轮）。Coordinator 须将 issues 数组放入下一轮 write payload.revision_context.review_issues。"
+}
