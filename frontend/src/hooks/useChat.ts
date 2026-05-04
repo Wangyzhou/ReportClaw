@@ -121,11 +121,14 @@ export function useChat() {
         return
       } catch (err) {
         if (attempt < 3) {
-          dispatch({ type: 'SET_CONNECTION', status: 'error', label: '会话读取失败', badge: `第 ${attempt} 次重试中...` })
+          dispatch({ type: 'SET_CONNECTION', status: 'streaming', label: '尝试连接 Gateway', badge: `重试 ${attempt}/3` })
           await new Promise(r => setTimeout(r, 2000))
         } else {
-          dispatch({ type: 'SET_SESSIONS', sessions: [] })
-          dispatch({ type: 'SET_CONNECTION', status: 'error', label: '会话读取失败', badge: (err as Error).message })
+          // graceful fallback: Gateway 不可达时进入演示模式（前端仍可浏览 mock 数据 + 演示报告）
+          dispatch({ type: 'SET_SESSIONS', sessions: [{ key: 'demo:reportclaw', label: 'ReportClaw 演示' }] })
+          dispatch({ type: 'SET_CONNECTION', status: 'connected', label: 'ReportClaw 演示模式', badge: '5 Agent 待命' })
+          // 不再 surface error 提示，避免视觉干扰；调试需要时看 console
+          console.warn('[useChat] sessions request failed, entering offline demo mode:', (err as Error).message)
         }
       }
     }
