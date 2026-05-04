@@ -140,31 +140,33 @@ def load_chunks():
     )
 
 
-# 价格从 OpenClaw 配置真读（不 hardcode，跟 OpenClaw runtime 同步）
-def _load_pricing():
-    """从 ~/.openclaw/openclaw.json 真读 deepseek-chat 价格。"""
-    try:
-        cfg = json.loads((Path.home() / ".openclaw/openclaw.json").read_text())
-        ds_models = cfg["models"]["providers"]["deepseek"]["models"]
-        for m in ds_models:
-            if m["id"] == "deepseek-chat":
-                c = m["cost"]
-                return {
-                    "input": c["input"] / 1_000_000,
-                    "output": c["output"] / 1_000_000,
-                    "cache_read": c.get("cacheRead", c["input"]) / 1_000_000,
-                }
-    except Exception as e:
-        print(f"[pricing] OpenClaw 配置读失败 fallback hardcode: {e}", file=sys.stderr)
-    # fallback: DeepSeek 公开标准价
-    return {"input": 0.28e-6, "output": 0.42e-6, "cache_read": 0.028e-6}
+# DeepSeek V4-Flash 真实价格（官网 https://api-docs.deepseek.com/quick_start/pricing 查证 2026-05-04）
+# 重要：API alias `deepseek-chat` 当前路由到 deepseek-v4-flash 非思考模式
+# `deepseek-reasoner` 路由到 deepseek-v4-flash 思考模式（同价）
+# 两个 alias 已被官方标记 "will be deprecated" — 建议直接用 deepseek-v4-flash
+#
+# OpenClaw ~/.openclaw/openclaw.json 配的是过时 V3 价格（$0.28/$0.42/$0.028），
+# 不再准确，所以这里 hardcode V4-Flash 真实标价。
+PRICING_V4_FLASH = {
+    "input": 0.14 / 1_000_000,        # cache miss
+    "output": 0.28 / 1_000_000,
+    "cache_read": 0.0028 / 1_000_000,  # cache hit (10x 便宜)
+}
 
+# DeepSeek V4-Pro（深度思考 + 长链路）真实价格 — 当前 75% 折扣到 2026-05-31
+PRICING_V4_PRO_DISCOUNTED = {
+    "input": 0.435 / 1_000_000,
+    "output": 0.87 / 1_000_000,
+    "cache_read": 0.003625 / 1_000_000,
+}
+
+# 当前默认走 V4-Flash（API alias deepseek-chat 路由）。
+# 要切 V4-Pro：DS_PRICING = PRICING_V4_PRO_DISCOUNTED + 改 _MODEL_MAP
+DS_PRICING = PRICING_V4_FLASH
 
 # Claude Sonnet 4.6 公开价格（Anthropic 官网）— 仅用于 cost 对比 baseline
 CLAUDE_SONNET_4_6_INPUT = 3 / 1_000_000
 CLAUDE_SONNET_4_6_OUTPUT = 15 / 1_000_000
-
-DS_PRICING = _load_pricing()
 
 
 def _usage_dict(msg) -> dict:
@@ -345,7 +347,7 @@ class ChatHandler(BaseHTTPRequestHandler):
                     "kind": "tool_result",
                     "name": label,
                     "title": f"💰 {label} · in={usage['input_tokens']} out={usage['output_tokens']}{cache_pct} · ${usage['cost_usd']:.5f}",
-                    "text": f"模型: deepseek-chat (真实 API 计费)\n本步: ${usage['cost_usd']:.5f} · 累计 ${total_cost:.5f}\nCache hit: {usage['cache_hit_tokens']} tokens ({usage['cache_hit_tokens'] * DS_PRICING['cache_read']:.5f} USD @cache_read) / miss: {usage['cache_miss_tokens']} (@input)\nClaude Sonnet 4.6 同等 token 等价: ${usage['claude_equivalent_usd']:.5f} ({usage['claude_equivalent_usd'] / max(usage['cost_usd'], 1e-9):.1f}x 节省)",
+                    "text": f"模型: deepseek-v4-flash (API alias: deepseek-chat) · 真实 API 计费\n本步: ${usage['cost_usd']:.5f} · 累计 ${total_cost:.5f}\nCache hit: {usage['cache_hit_tokens']} tokens (@$0.0028/M) / miss: {usage['cache_miss_tokens']} (@$0.14/M) / output: {usage['output_tokens']} (@$0.28/M)\nClaude Sonnet 4.6 同等 token 等价: ${usage['claude_equivalent_usd']:.5f} ({usage['claude_equivalent_usd'] / max(usage['cost_usd'], 1e-9):.1f}x 节省)",
                     "itemId": f"cost-{label.lower()}",
                 })
 
@@ -463,7 +465,7 @@ class ChatHandler(BaseHTTPRequestHandler):
                 "kind": "tool_result",
                 "name": "ReportClaw",
                 "title": f"💰 本轮真实总成本 ${total_cost:.5f} · {total_input + total_output} tokens · {savings:.1f}x 节省 vs Claude",
-                "text": f"模型: deepseek-chat (3 次 LLM 调用 · {gear} 链路)\n真实 token: in {total_input} / out {total_output}\nCache hit ratio: {cache_ratio:.1f}% ({total_cache_hit} tokens 走 ${DS_PRICING['cache_read'] * 1e6:.3f}/M 折扣价)\nDeepSeek 真实计费: ${total_cost:.5f}\nClaude Sonnet 4.6 等价计费: ${total_claude_eq:.5f}\n节省倍数: {savings:.1f}x\n\n价格源: ~/.openclaw/openclaw.json deepseek 配置\nClaude baseline: Anthropic 官方 $3/M input + $15/M output (sonnet-4-6 标价)",
+                "text": f"模型: deepseek-v4-flash (API alias: deepseek-chat) · 3 次 LLM 调用 · {gear} 链路\n真实 token: in {total_input} / out {total_output}\nCache hit ratio: {cache_ratio:.1f}% ({total_cache_hit} tokens 走 $0.0028/M 折扣价)\n\nDeepSeek V4-Flash 真实计费: ${total_cost:.5f}\n  - input cache miss × $0.14/M\n  - input cache hit × $0.0028/M\n  - output × $0.28/M\nClaude Sonnet 4.6 等价计费: ${total_claude_eq:.5f}\n节省倍数: {savings:.1f}x\n\n价格源: DeepSeek 官网 https://api-docs.deepseek.com/quick_start/pricing (查证 2026-05-04)\nClaude baseline: Anthropic 官方 $3/M input + $15/M output (sonnet-4-6 标价)",
                 "itemId": "total-cost",
             })
             emit({"type": "done", "runId": run_id})
