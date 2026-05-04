@@ -140,7 +140,24 @@ def load_chunks():
     )
 
 
-def build_dispatch(message: str, client) -> dict:
+# DeepSeek 价格 (per 1M tokens, USD)
+DS_INPUT_PRICE = 0.28 / 1_000_000
+DS_OUTPUT_PRICE = 0.42 / 1_000_000
+
+
+def _usage_dict(msg) -> dict:
+    """从 msg.usage 抽 token + cost dict（兼容 shim 的 _Usage 结构）。"""
+    inp = getattr(msg.usage, "input_tokens", 0)
+    out = getattr(msg.usage, "output_tokens", 0)
+    return {
+        "input_tokens": inp,
+        "output_tokens": out,
+        "cost_usd": round(inp * DS_INPUT_PRICE + out * DS_OUTPUT_PRICE, 6),
+    }
+
+
+def build_dispatch(message: str, client):
+    """returns (dispatch_dict, usage_dict)"""
     try:
         msg = client.messages.create(
             model="claude-sonnet-4-6",
@@ -148,14 +165,16 @@ def build_dispatch(message: str, client) -> dict:
             temperature=0.3,
             messages=[{"role": "user", "content": COORDINATOR_PROMPT.format(message=message)}],
         )
+        usage = _usage_dict(msg)
         m = re.search(r"\{.*\}", msg.content[0].text, re.DOTALL)
         if m:
             payload = json.loads(m.group(0))
             payload.setdefault("user_request", message)
-            return payload
+            return payload, usage
     except Exception as e:
         print(f"[coord] fallback: {e}", file=sys.stderr)
-    return {
+    fallback_usage = {"input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0}
+    fallback_dispatch = {
         "user_request": message,
         "intent": "generate_report",
         "gear": "G2",
@@ -166,6 +185,7 @@ def build_dispatch(message: str, client) -> dict:
             {"task_id": "t3", "to_agent": "reviewer", "task_type": "review", "depends_on": ["t2"]},
         ],
     }
+    return fallback_dispatch, fallback_usage
 
 
 def call_writer(message: str, chunks_data, client) -> str:
@@ -181,10 +201,11 @@ def call_writer(message: str, chunks_data, client) -> str:
             {"role": "user", "content": WRITER_PROMPT.format(message=message, chunks=chunks_block)},
         ],
     )
-    return msg.content[0].text.strip()
+    return msg.content[0].text.strip(), _usage_dict(msg)
 
 
-def call_reviewer(report: str, chunk_ids, client) -> dict:
+def call_reviewer(report: str, chunk_ids, client):
+    """returns (review_dict, usage_dict)"""
     try:
         msg = client.messages.create(
             model="claude-sonnet-4-6",
@@ -199,16 +220,20 @@ def call_reviewer(report: str, chunk_ids, client) -> dict:
                 }
             ],
         )
+        usage = _usage_dict(msg)
         m = re.search(r"\{.*\}", msg.content[0].text, re.DOTALL)
         if m:
-            return json.loads(m.group(0))
+            return json.loads(m.group(0)), usage
     except Exception as e:
         print(f"[review] fallback: {e}", file=sys.stderr)
-    return {
-        "verdict": "pass",
-        "issues": [],
-        "scores": {"coverage_score": 0.88, "quality_score": 0.85, "citation_accuracy": 0.95},
-    }
+    return (
+        {
+            "verdict": "pass",
+            "issues": [],
+            "scores": {"coverage_score": 0.88, "quality_score": 0.85, "citation_accuracy": 0.95},
+        },
+        {"input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0},
+    )
 
 
 # ─────────────────────────── HTTP handler ───────────────────────────
@@ -260,6 +285,26 @@ class ChatHandler(BaseHTTPRequestHandler):
             client = Anthropic()
             print(f"[chat] message={message!r}", file=sys.stderr)
 
+            # 累计成本 + token
+            total_cost = 0.0
+            total_input = 0
+            total_output = 0
+
+            def add_usage(label: str, usage: dict):
+                nonlocal total_cost, total_input, total_output
+                total_cost += usage["cost_usd"]
+                total_input += usage["input_tokens"]
+                total_output += usage["output_tokens"]
+                # emit 单步成本
+                emit({
+                    "type": "activity",
+                    "kind": "tool_result",
+                    "name": label,
+                    "title": f"💰 {label} · in={usage['input_tokens']} out={usage['output_tokens']} · ${usage['cost_usd']:.4f}",
+                    "text": f"模型: deepseek-chat · 累计 ${total_cost:.4f}",
+                    "itemId": f"cost-{label.lower()}",
+                })
+
             # 链路开始
             emit({"type": "connected", "runId": run_id})
             emit({"type": "run-started", "runId": run_id})
@@ -272,7 +317,8 @@ class ChatHandler(BaseHTTPRequestHandler):
                 "title": "Coordinator 判档中...",
                 "status": "running",
             })
-            dispatch = build_dispatch(message, client)
+            dispatch, coord_usage = build_dispatch(message, client)
+            add_usage("Coordinator", coord_usage)
             gear = dispatch.get("gear", "G2")
             emit({
                 "type": "activity",
@@ -328,7 +374,8 @@ class ChatHandler(BaseHTTPRequestHandler):
                 "status": "running",
             })
             task_update("t2-write", "writer", "running")
-            report_md = call_writer(message, chunks_data, client)
+            report_md, writer_usage = call_writer(message, chunks_data, client)
+            add_usage("Writer", writer_usage)
 
             # 切 chunk 模拟流式（视觉效果）
             chunk_size = 30
@@ -349,7 +396,8 @@ class ChatHandler(BaseHTTPRequestHandler):
                 "status": "running",
             })
             task_update("t3-review", "reviewer", "running")
-            review = call_reviewer(report_md, chunk_ids, client)
+            review, review_usage = call_reviewer(report_md, chunk_ids, client)
+            add_usage("Reviewer", review_usage)
 
             verdict = review.get("verdict", "pass")
             scores = review.get("scores", {})
@@ -363,7 +411,15 @@ class ChatHandler(BaseHTTPRequestHandler):
             })
             task_update("t3-review", "reviewer", "completed" if verdict == "pass" else "failed")
 
-            # 完成
+            # 链路完成 — 总成本 summary
+            emit({
+                "type": "activity",
+                "kind": "tool_result",
+                "name": "ReportClaw",
+                "title": f"💰 本轮总成本 ${total_cost:.4f} · {total_input + total_output} tokens (in {total_input} / out {total_output})",
+                "text": f"模型: deepseek-chat\n3 次 LLM 调用 · {gear} 链路\n等价 Claude Sonnet 4.6 成本: ${(total_input * 3 + total_output * 15) / 1_000_000:.4f} (10x 节省)",
+                "itemId": "total-cost",
+            })
             emit({"type": "done", "runId": run_id})
             self.wfile.write(b"0\r\n\r\n")
             self.wfile.flush()

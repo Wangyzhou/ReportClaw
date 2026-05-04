@@ -152,6 +152,57 @@ sessions_spawn({
 
 ---
 
+## 审查回环硬规则（BY_ORDER SOP）
+
+**借鉴自 MetaGPT 的 BY_ORDER SOP**：审查回环的终止条件**不是 LLM 判断**，是 round counter 硬规则。Coordinator 必须按下面的状态机执行，**禁止 LLM 自由决定"是否再改一轮"**。
+
+### 状态机
+
+```
+状态: rounds_used = 0, max_review_rounds = 2 (G2) / 3 (G3 仅 dynamic upgrade)
+
+派 Writer (round 1)
+  → 收 Writer draft
+  → 派 Reviewer (round 1)
+  → rounds_used = 1
+  → 看 Reviewer verdict:
+      verdict = "pass"            → 交付 (终止)
+      verdict = "fail"            → 升级用户 (终止，不重试)
+      verdict = "needs_revision":
+          if rounds_used < max:
+              → 派 Writer (round 2, 带 revision_context)
+              → 派 Reviewer (round 2)
+              → rounds_used = 2
+              → 看 verdict:
+                  pass            → 交付
+                  needs_revision  → 升级用户 (硬终止：第 3 轮不允许)
+                  fail            → 升级用户
+          else:
+              → 升级用户 (硬终止)
+```
+
+### 升级用户的固定话术
+
+当硬终止触发时，必须给用户**3 选项**，不要给 4 个或 2 个，不要让 LLM 自由表达：
+
+```
+当前报告已达最大审查轮数 (rounds_used / max_review_rounds)，仍存在 N 个 HIGH 级别问题：
+- 接受当前版本（已知问题列表附后）
+- 重新开始（可调整知识库范围 / 报告主题 / 长度约束）
+- 由人工继续修订（导出当前 draft，您手动改完上传新版本）
+
+请选择 1/2/3。
+```
+
+### 为什么硬规则而非 LLM 判断
+
+1. **终止性可证明**：硬规则保证 100% 终止；LLM 自由判断有"再改一轮也许更好"的概率漂移，最坏 case token 失控
+2. **成本可预算**：max_review_rounds × 单轮成本 = 上限，前端显示"本轮预算 ≤ $X"
+3. **可重放**：同输入 + 同 round counter → 同结果（LLM 自由判断破坏可复现性）
+4. **审计留痕**：rounds_used 字段写进 `revision_context`，对应 deliverables/generation-log.json 一行记录
+
+---
+
 ## 反例（禁止）
 
 - ❌ 把 retrieve 和 write 合并成一个 task 给 Writer（Writer 不会检索）
@@ -162,3 +213,6 @@ sessions_spawn({
 - ❌ 改写时把源稿也加入检索 doc_ids（源稿通过 fetch_document 取，不是用来检索新数据的）
 - ❌ 生成 subtasks 后不调 sessions_spawn，只是文字描述计划（计划不等于执行）
 - ❌ 用 sessions_list 轮询等结果（等 announce 即可，不要轮询）
+- ❌ 让 LLM 自由判断"还要不要再改一轮"（违反 BY_ORDER SOP — 必须按 rounds_used/max_review_rounds 硬规则）
+- ❌ 升级用户时让 LLM 自由表达建议（必须用上面 3 选项固定话术，前端 parser 才能识别）
+- ❌ 第 3 轮派 Writer (rounds_used == max_review_rounds 时仍触发新 round) — 硬终止条件违反
