@@ -1,11 +1,34 @@
+import type { CauseChain } from '../../types'
+
 function escapeHtml(value: string): string {
   return value
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;')
 }
 
-export function renderMarkdown(raw: string): string {
+function buildRefTooltip(chunkId: string, chain: CauseChain | undefined): string {
+  if (!chain) return `引用: ${chunkId}（cause chain 未传入）`
+  const r = chain.retrieval
+  const writerCount = chain.writer_uses?.length ?? 0
+  const verdict = chain.reviewer_verdict
+  const lines = [
+    `📚 Retriever 检索：${r.doc_name}` + (r.page ? ` · 第 ${r.page} 页` : ''),
+    `   分类: ${r.category} · 相关度: ${r.relevance_score?.toFixed(2) ?? '?'}`,
+    `   "${(r.content_preview || '').slice(0, 80)}..."`,
+    ``,
+    `✍️ Writer 在本报告引用 ${writerCount} 次`,
+    ``,
+    verdict
+      ? `🔍 Reviewer 校验: ${verdict.valid ? '✓ 引用合法' : '✗ 引用失败'}（citation_accuracy: ${(verdict.citation_accuracy_score * 100).toFixed(0)}%）`
+      : `🔍 Reviewer: 未审查`,
+  ]
+  return lines.join('\n')
+}
+
+export function renderMarkdown(raw: string, causeChains?: Record<string, CauseChain>): string {
   const escaped = escapeHtml(raw)
   let html = escaped
 
@@ -15,7 +38,14 @@ export function renderMarkdown(raw: string): string {
 
   html = html.replace(/`([^`\n]+)`/g, '<code class="md-inline-code">$1</code>')
   html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-  html = html.replace(/\[ref:([^\]]+)\]/g, '<a class="md-ref" data-chunk-id="$1" href="#">[来源]</a>')
+
+  // [ref:chunk_id] → 可 hover 元素，title 显示完整 cause chain
+  html = html.replace(/\[ref:([^\]]+)\]/g, (_match, chunkId) => {
+    const chain = causeChains?.[chunkId]
+    const tooltip = escapeHtml(buildRefTooltip(chunkId, chain))
+    const hasChain = chain ? 'has-chain' : 'no-chain'
+    return `<a class="md-ref ${hasChain}" data-chunk-id="${chunkId}" href="#" title="${tooltip}">[来源]</a>`
+  })
 
   html = html.replace(/^### (.+)$/gm, '<h4 class="md-h3">$1</h4>')
   html = html.replace(/^## (.+)$/gm, '<h3 class="md-h2">$1</h3>')

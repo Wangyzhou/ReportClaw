@@ -1,13 +1,14 @@
 import styles from './ChatPanel.module.css'
 import { renderMarkdown } from './markdown'
-import type { ChatMessage } from '../../types'
+import type { ChatMessage, CauseChain } from '../../types'
 
 interface Props {
   message: ChatMessage
   onRefClick?: (chunkId: string) => void
+  causeChains?: Record<string, CauseChain>
 }
 
-export function MessageBubble({ message, onRefClick }: Props) {
+export function MessageBubble({ message, onRefClick, causeChains }: Props) {
   const time = message.timestamp.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
 
   const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -27,7 +28,7 @@ export function MessageBubble({ message, onRefClick }: Props) {
       {message.role === 'assistant' ? (
         <div
           className={styles.messageBubble}
-          dangerouslySetInnerHTML={{ __html: renderMarkdown(message.text) }}
+          dangerouslySetInnerHTML={{ __html: renderMarkdown(message.text, causeChains) }}
           onClick={handleClick}
         />
       ) : (

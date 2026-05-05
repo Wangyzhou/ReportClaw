@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react'
 import styles from './ChatPanel.module.css'
 import { MessageList } from './MessageList'
 import { Composer } from './Composer'
-import type { ChatMessage, InlineActivity, ConnectionStatus, Session, KnowledgeDocument, ChatPayload } from '../../types'
+import type { ChatMessage, InlineActivity, ConnectionStatus, Session, KnowledgeDocument, ChatPayload, CauseChain } from '../../types'
 
 interface Props {
   messages: ChatMessage[]
@@ -16,6 +16,7 @@ interface Props {
   onRefClick?: (chunkId: string) => void
   documents?: KnowledgeDocument[]
   onMentionClick?: (docId: string, category: string) => void
+  causeChains?: Record<string, CauseChain>
 }
 
 export function ChatPanel({
@@ -30,6 +31,7 @@ export function ChatPanel({
   onRefClick,
   documents = [],
   onMentionClick,
+  causeChains,
 }: Props) {
   const [sending, setSending] = useState(false)
   const [selectedSession, setSelectedSession] = useState('')
@@ -73,7 +75,7 @@ export function ChatPanel({
         </div>
       </header>
 
-      <MessageList messages={messages} activities={activities} onRefClick={onRefClick} />
+      <MessageList messages={messages} activities={activities} onRefClick={onRefClick} causeChains={causeChains} />
 
       <Composer onSend={handleSend} disabled={sending} documents={documents} onMentionClick={onMentionClick} />
     </section>

@@ -1,5 +1,5 @@
 import { useReducer, useCallback } from 'react'
-import type { ChatMessage, InlineActivity, ConnectionStatus, Session, StreamEvent, ChatPayload } from '../types'
+import type { ChatMessage, InlineActivity, ConnectionStatus, Session, StreamEvent, ChatPayload, CauseChain } from '../types'
 
 interface ChatState {
   messages: ChatMessage[]
@@ -12,6 +12,7 @@ interface ChatState {
   currentAssistantText: string
   sessions: Session[]
   messageCounter: number
+  causeChains: Record<string, CauseChain>
 }
 
 type ChatAction =
@@ -21,6 +22,7 @@ type ChatAction =
   | { type: 'UPDATE_ASSISTANT'; delta: string }
   | { type: 'UPSERT_ACTIVITY'; activity: InlineActivity }
   | { type: 'SET_RUN_ID'; runId: string }
+  | { type: 'SET_CAUSE_CHAINS'; chains: Record<string, CauseChain> }
   | { type: 'RESET_STREAM' }
 
 function chatReducer(state: ChatState, action: ChatAction): ChatState {
@@ -79,6 +81,9 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'SET_RUN_ID':
       return { ...state, currentRunId: action.runId }
 
+    case 'SET_CAUSE_CHAINS':
+      return { ...state, causeChains: { ...state.causeChains, ...action.chains } }
+
     case 'RESET_STREAM':
       return {
         ...state,
@@ -86,6 +91,7 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
         currentRunId: null,
         currentAssistantId: null,
         currentAssistantText: '',
+        causeChains: {},
       }
 
     default:
@@ -104,6 +110,7 @@ const initialState: ChatState = {
   currentAssistantText: '',
   sessions: [],
   messageCounter: 0,
+  causeChains: {},
 }
 
 export function useChat() {
@@ -212,6 +219,11 @@ function handleStreamEvent(event: StreamEvent, dispatch: React.Dispatch<ChatActi
       const key = (event.itemId || event.toolCallId ||
         `${event.type}:${event.stream || ''}:${event.kind || ''}:${event.name || ''}:${event.phase || ''}:${event.title || ''}`) as string
       dispatch({ type: 'UPSERT_ACTIVITY', activity: { ...event, key } as InlineActivity })
+      break
+    }
+    case 'cause_chain': {
+      const chains = (event.data as { chunks?: Record<string, CauseChain> })?.chunks
+      if (chains) dispatch({ type: 'SET_CAUSE_CHAINS', chains })
       break
     }
     case 'done':

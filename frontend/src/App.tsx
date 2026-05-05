@@ -58,6 +58,7 @@ export default function App() {
         onRefClick={setActiveChunkId}
         documents={kbDocuments}
         onMentionClick={handleMentionClick}
+        causeChains={state.causeChains}
       />
       <DeliveryPanel />
       <ChunkDrawer chunkId={activeChunkId} onClose={() => setActiveChunkId(null)} />
