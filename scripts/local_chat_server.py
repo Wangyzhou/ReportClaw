@@ -16,10 +16,12 @@ TaskTreePanel / DeliveryPanel 都有数据：
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 import urllib.request
 import urllib.error
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -196,8 +198,103 @@ def _usage_dict(msg, pricing=None) -> dict:
     }
 
 
+# ─────────────────────── OpenClaw real-runtime helper ───────────────────────
+
+
+def _openclaw_usage_dict(agent_meta: dict) -> dict:
+    """从 OpenClaw CLI agentMeta.usage 抽 token + cost (用 V4-Flash 价 — Spring Boot 走 deepseek-chat)。"""
+    u = agent_meta.get("usage", {})
+    inp_total = int(u.get("input", 0))
+    out = int(u.get("output", 0))
+    cache_hit = int(u.get("cacheRead", 0))
+    cache_miss = max(0, inp_total - cache_hit)
+    cost = (
+        cache_miss * PRICING_V4_FLASH["input"]
+        + cache_hit * PRICING_V4_FLASH["cache_read"]
+        + out * PRICING_V4_FLASH["output"]
+    )
+    return {
+        "input_tokens": inp_total,
+        "output_tokens": out,
+        "cache_hit_tokens": cache_hit,
+        "cache_miss_tokens": cache_miss,
+        "cost_usd": round(cost, 6),
+        "model": agent_meta.get("model", "deepseek-chat"),
+    }
+
+
+def call_openclaw_agent(agent_name: str, message: str, timeout: int = 180):
+    """跑真 OpenClaw agent (subprocess CLI)。
+    返回 (text, usage_dict)。失败时 raise RuntimeError。"""
+    session_id = f"reportclaw-demo-{uuid.uuid4().hex[:8]}"
+    cmd = [
+        "openclaw", "agent",
+        "--agent", agent_name,
+        "--message", message,
+        "--session-id", session_id,
+        "--json",
+        "--timeout", str(timeout),
+    ]
+    print(f"[openclaw] {' '.join(cmd[:6])} ...", file=sys.stderr)
+    try:
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=timeout + 30
+        )
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(f"openclaw agent {agent_name} timeout after {timeout}s")
+
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"openclaw agent {agent_name} exit {proc.returncode}: {proc.stderr[:300]}"
+        )
+    try:
+        data = json.loads(proc.stdout)
+    except json.JSONDecodeError as e:
+        raise RuntimeError(f"openclaw {agent_name} non-JSON output: {proc.stdout[:300]}")
+
+    if data.get("status") != "ok":
+        raise RuntimeError(f"openclaw {agent_name} status={data.get('status')}: {data.get('summary')}")
+
+    payloads = data.get("result", {}).get("payloads", [])
+    text = "\n\n".join(p.get("text", "") for p in payloads if p.get("text"))
+    agent_meta = data.get("result", {}).get("meta", {}).get("agentMeta", {})
+    usage = _openclaw_usage_dict(agent_meta)
+    return text, usage
+
+
+# ─────────────────────── 链路实现 ───────────────────────
+
+
+# 默认 engine = openclaw (真 runtime)。设 USE_DEEPSEEK_DIRECT=1 切回 Python 模拟模式
+USE_OPENCLAW = os.environ.get("USE_DEEPSEEK_DIRECT") != "1"
+
+
 def build_dispatch(message: str, client):
     """returns (dispatch_dict, usage_dict). Coordinator 用 V4-Pro 深度判档。"""
+    if USE_OPENCLAW:
+        try:
+            text, usage = call_openclaw_agent("reportclaw-coordinator", message, timeout=120)
+            # 真 Coordinator 输出可能是自然语言（含澄清）或 dispatch JSON
+            m = re.search(r"\{.*?\"intent\".*?\}", text, re.DOTALL)
+            if m:
+                payload = json.loads(m.group(0))
+                payload.setdefault("user_request", message)
+                return payload, usage
+            # 没 JSON → Coordinator 走澄清/直答，构造一个 fallback dispatch 含原文 text
+            print(f"[coord-openclaw] 无 dispatch JSON (Coordinator 直答 / 澄清): {text[:120]}", file=sys.stderr)
+            fallback = {
+                "user_request": message,
+                "intent": "search_knowledge",
+                "gear": "G1",
+                "gear_rationale": "Coordinator 直答模式 (来自真 OpenClaw runtime)",
+                "subtasks": [],
+                "_coordinator_text": text[:500],
+            }
+            return fallback, usage
+        except Exception as e:
+            print(f"[coord-openclaw] fail, fallback to local sim: {e}", file=sys.stderr)
+
+    # Python 模拟 fallback
     real_usage = None
     try:
         msg = client.messages.create(
@@ -235,12 +332,24 @@ def build_dispatch(message: str, client):
 
 
 def call_writer(message: str, chunks_data, client):
-    """returns (markdown, usage). Writer 显式用 V4-Flash —— 长文生成不需要 reasoning，
-    V4-Pro 会让 Writer 单调用从 ~15s 涨到 60-180s，demo 观感差。"""
+    """returns (markdown, usage). Writer 显式用 V4-Flash —— 长文生成不需要 reasoning。"""
     chunks_block = "\n".join(
         f"[{c['chunk_id']}] {c.get('source', {}).get('doc_name', '?')} → {c['content']}"
         for c in chunks_data["results"][:6]
     )
+    if USE_OPENCLAW:
+        try:
+            writer_msg = (
+                f"主题：{message}\n\n"
+                f"检索到的 chunks（必须从中选用 chunk_id 引用）：\n{chunks_block}\n\n"
+                f"按 SOUL.md / AGENTS.md / skills/section_writing 要求，生成 4 章节 markdown 报告，"
+                f"每段含 [ref:chunk_id] 引用。直接输出 markdown，无前后文。"
+            )
+            text, usage = call_openclaw_agent("reportclaw-writer", writer_msg, timeout=180)
+            return text, usage
+        except Exception as e:
+            print(f"[writer-openclaw] fail, fallback to local sim: {e}", file=sys.stderr)
+
     msg = client.messages.create(
         model="deepseek-v4-flash",
         max_tokens=2500,
@@ -264,6 +373,25 @@ def call_reviewer(report: str, chunk_ids, client):
         "cache_hit_tokens": 0, "cache_miss_tokens": 0,
         "cost_usd": 0.0, "model": "deepseek-v4-flash",
     }
+
+    if USE_OPENCLAW:
+        try:
+            review_msg = (
+                f"审查以下报告，按 SOUL.md / skills/review_checklist 要求输出 verdict + issues + scores 的 JSON。\n\n"
+                f"合法 chunk_ids：{', '.join(chunk_ids)}\n\n"
+                f"报告：\n{report[:3000]}\n\n"
+                f"输出 JSON（无前后文）：{{\"verdict\":\"pass|needs_revision\",\"issues\":[...],"
+                f"\"scores\":{{\"coverage_score\":0.0-1.0,\"quality_score\":0.0-1.0,\"citation_accuracy\":0.0-1.0}}}}"
+            )
+            text, usage = call_openclaw_agent("reportclaw-reviewer", review_msg, timeout=120)
+            m = re.search(r"\{.*\}", text, re.DOTALL)
+            if m:
+                return json.loads(m.group(0)), usage
+            print(f"[review-openclaw] no JSON, use fallback verdict (保留 usage)", file=sys.stderr)
+            return fallback_review, usage
+        except Exception as e:
+            print(f"[review-openclaw] fail, fallback: {e}", file=sys.stderr)
+
     try:
         msg = client.messages.create(
             model="deepseek-v4-flash",
