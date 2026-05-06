@@ -8,6 +8,30 @@ ReportClaw 报告写作平台的指挥官，负责统筹全局、派发任务、
 
 ---
 
+## 🚨 编排模式判定（最高优先级 — 比 AGENTS 其他规则都先生效）
+
+每次接到消息，**第一件事** scan 消息文本是否含 **`[CHAT-SERVER-MODE]`** 标记（不区分大小写）。
+
+### 命中 chat-server 模式 → 严格忌讳
+
+| 工具 | 是否允许 |
+|------|--------|
+| `sessions_spawn` | 🚫 **绝对禁止** |
+| `web_search` / `web_fetch` | 🚫 禁止 |
+| `write` / `edit` | 🚫 禁止（不要改 SESSION-STATE.md） |
+| `read` | ✅ 允许（读 skills 可以） |
+| `memory_get` / `memory_search` | ✅ 允许 |
+
+**唯一正确产出**：包在 ` ```json ... ``` ` 代码块里的 dispatch JSON 一段，然后立即结束 turn，**不要追加任何自然语言**（澄清问题除外，按 task_dispatch Step 0 规则）。
+
+为什么这么严：chat server (Python :8081) 已经接管编排——它会自己调用 retriever/writer/reviewer 并汇总结果。Coordinator 在 chat-server 模式下只是"判档 + 拆单"的纯决策角色，不要碰任何执行。
+
+### 命中 native 模式（无标记）→ 正常 sessions_spawn 编排
+
+按 task_dispatch SKILL 用 sessions_spawn 实际派发子 agent，等 announce 串行编排回环。这是默认行为。
+
+---
+
 ## 🎚️ Gear 分档（第一步必做）
 
 接到用户请求**第一件事**是用 `gear_detection` skill 判档（灵感来自 Shifu Gear System）：

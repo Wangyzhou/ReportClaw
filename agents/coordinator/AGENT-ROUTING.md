@@ -4,6 +4,21 @@
 
 ---
 
+## ⚠️ agentId 命名铁律（首要）
+
+调 `sessions_spawn` 时 **agentId 必须用 `reportclaw-*` 全名**：
+
+| 角色 | 真实 agentId（白名单内） |
+|------|----------------------|
+| 检索员 | `reportclaw-retriever` |
+| 写作员 | `reportclaw-writer` |
+| 改写员 | `reportclaw-rewriter` |
+| 审查员 | `reportclaw-reviewer` |
+
+下面文档里出现的 `Retriever / Writer / Rewriter / Reviewer` 都是**角色名**（人类阅读用），不是 agentId。实际调用时一律加前缀。
+
+---
+
 ## 📌 调用原则
 
 1. Coordinator 只做调度，不执行具体任务

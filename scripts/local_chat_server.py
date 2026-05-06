@@ -13,6 +13,7 @@ TaskTreePanel / DeliveryPanel 都有数据：
 
 依赖：scripts/_deepseek_shim.py + Spring Boot 跑在 :8080 + DeepSeek key
 """
+import hashlib
 import json
 import os
 import re
@@ -137,9 +138,67 @@ REVIEWER_PROMPT = """你是 ReportClaw Reviewer。审查报告，输出 JSON。
 
 
 def load_chunks():
+    """Mock fallback (RAGFlow / web_search 都不可用时用)。"""
     return json.loads(
         (ROOT / "mocks/retriever-response-high-coverage.json").read_text(encoding="utf-8")
     )
+
+
+_RETRIEVER_HEX_RE = re.compile(r"^[0-9a-f]{16}$")
+
+
+def _hex16(seed: str) -> str:
+    """生成稳定的 16 位 hex chunk_id（满足 reviewer SKILL 32 位以内格式校验）。"""
+    return hashlib.sha256(seed.encode("utf-8")).hexdigest()[:16]
+
+
+def call_retriever_openclaw(query: str, top_k: int = 8):
+    """调真 OpenClaw retriever agent；它会用 web_search/web_fetch 兜底（RAGFlow 不可用时）。
+    返回兼容 load_chunks() 的结构：{results: [...], coverage_assessment, missing_topics}
+    失败 raise RuntimeError 让上层兜底到 mocks。"""
+    msg = (
+        f"请检索：{query}\n\n"
+        f"返回 {top_k} 条最相关的 chunks，每条带 chunk_id (16 位 hex)、source、content (200-400 字)、relevance_score (0-1)。"
+        "如果 RAGFlow / mcporter 不可用，用 web_search / web_fetch 兜底取真实数据。"
+        "输出 JSON：{\"chunks\": [...], \"coverage_assessment\": \"高|中|低\", \"missing_topics\": []}"
+    )
+    text, usage = call_openclaw_agent("reportclaw-retriever", msg, timeout=120)
+
+    # 抽 fenced ```json ... ``` 或 balanced-brace
+    payload = _extract_dispatch_json(text) if "{" in text else None
+    if not payload:
+        raise RuntimeError(f"retriever non-JSON output: {text[:200]}")
+
+    raw_chunks = payload.get("chunks") or payload.get("results") or []
+    if not raw_chunks:
+        raise RuntimeError(f"retriever returned 0 chunks: {text[:200]}")
+
+    # 标准化：source 字符串 → {doc_name}; chunk_id 不是 16 位 hex 就重新生成
+    results = []
+    for i, c in enumerate(raw_chunks[:top_k]):
+        cid = c.get("chunk_id") or c.get("chunkId") or ""
+        if not _RETRIEVER_HEX_RE.match(cid):
+            cid = _hex16(f"{query}#{i}#{c.get('source','')}")
+        src = c.get("source")
+        if isinstance(src, str):
+            doc_name = src
+        elif isinstance(src, dict):
+            doc_name = src.get("doc_name") or src.get("documentName") or "未知来源"
+        else:
+            doc_name = "未知来源"
+        results.append({
+            "chunk_id": cid,
+            "source": {"doc_name": doc_name, "category": "web", "doc_id": cid, "dataset_id": "web-search"},
+            "content": c.get("content", ""),
+            "relevance_score": c.get("relevance_score") or c.get("score") or 0.8,
+        })
+
+    return {
+        "results": results,
+        "coverage_assessment": payload.get("coverage_assessment", "中"),
+        "missing_topics": payload.get("missing_topics", []),
+        "_retriever_usage": usage,
+    }
 
 
 # DeepSeek V4-Flash 真实价格（官网 https://api-docs.deepseek.com/quick_start/pricing 查证 2026-05-04）
@@ -269,15 +328,71 @@ def call_openclaw_agent(agent_name: str, message: str, timeout: int = 180):
 USE_OPENCLAW = os.environ.get("USE_DEEPSEEK_DIRECT") != "1"
 
 
+_ORCH_MODE_HINT = (
+    "[CHAT-SERVER-MODE] 严禁调用 sessions_spawn / write / edit / web_search 等任何工具。"
+    "唯一允许输出：包在 ```json ... ``` 里的 dispatch JSON，然后结束 turn。"
+    "chat server 已接管编排，会自己派发子 agent 并汇总结果。"
+)
+
+
+def _extract_dispatch_json(text: str):
+    """从 Coordinator 输出里抽 dispatch JSON。
+
+    优先级 1: ```json ... ``` fenced block（chat-server 模式 SKILL 强制）
+    优先级 2: balanced-brace 扫描（兼容旧输出）
+    """
+    fence = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
+    if fence:
+        try:
+            return json.loads(fence.group(1))
+        except json.JSONDecodeError:
+            pass
+
+    start = text.find("{")
+    while start != -1:
+        depth = 0
+        in_str = False
+        esc = False
+        for i in range(start, len(text)):
+            ch = text[i]
+            if esc:
+                esc = False
+                continue
+            if ch == "\\":
+                esc = True
+                continue
+            if ch == '"':
+                in_str = not in_str
+                continue
+            if in_str:
+                continue
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    candidate = text[start : i + 1]
+                    if '"intent"' in candidate:
+                        try:
+                            return json.loads(candidate)
+                        except json.JSONDecodeError:
+                            break
+                    break
+        start = text.find("{", start + 1)
+    return None
+
+
 def build_dispatch(message: str, client):
-    """returns (dispatch_dict, usage_dict). Coordinator 用 V4-Pro 深度判档。"""
+    """returns (dispatch_dict, usage_dict). Coordinator 用 V4-Pro 深度判档。
+
+    注入 chat-server 编排标记 → 让 OpenClaw Coordinator 只输出 dispatch JSON、不调 sessions_spawn
+    （否则会和本 chat server 编排撞车）。约定见 task_dispatch SKILL.md "编排模式" 章节。"""
     if USE_OPENCLAW:
         try:
-            text, usage = call_openclaw_agent("reportclaw-coordinator", message, timeout=120)
-            # 真 Coordinator 输出可能是自然语言（含澄清）或 dispatch JSON
-            m = re.search(r"\{.*?\"intent\".*?\}", text, re.DOTALL)
-            if m:
-                payload = json.loads(m.group(0))
+            coord_msg = f"{_ORCH_MODE_HINT}\n\n{message}"
+            text, usage = call_openclaw_agent("reportclaw-coordinator", coord_msg, timeout=120)
+            payload = _extract_dispatch_json(text)
+            if payload is not None:
                 payload.setdefault("user_request", message)
                 return payload, usage
             # 没 JSON → Coordinator 走澄清/直答，构造一个 fallback dispatch 含原文 text
@@ -534,25 +649,38 @@ class ChatHandler(BaseHTTPRequestHandler):
             task_create("t3-review", "reviewer", "引用与质量校验", parent_id=None)
             time.sleep(0.4)
 
-            # 2. Retrieval
+            # 2. Retrieval — 真 OpenClaw retriever（web_search 兜底；失败回退 mocks）
             emit({
                 "type": "lifecycle",
                 "kind": "phase",
                 "phase": "retriever",
-                "title": "Retriever 调 RAGFlow 混合检索...",
+                "title": "Retriever 检索（真 OpenClaw + web_search 兜底）...",
                 "status": "running",
             })
             task_update("t1-retrieve", "retriever", "running")
             time.sleep(0.3)
 
-            chunks_data = load_chunks()
+            retriever_real = False
+            if USE_OPENCLAW:
+                try:
+                    chunks_data = call_retriever_openclaw(message, top_k=8)
+                    retriever_usage = chunks_data.pop("_retriever_usage", None)
+                    if retriever_usage:
+                        add_usage("Retriever", retriever_usage)
+                    retriever_real = True
+                except Exception as e:
+                    print(f"[retriever-openclaw] fail, fallback to mocks: {e}", file=sys.stderr)
+                    chunks_data = load_chunks()
+            else:
+                chunks_data = load_chunks()
+
             chunk_ids = [c["chunk_id"] for c in chunks_data["results"][:6]]
 
             emit({
                 "type": "activity",
                 "kind": "tool_result",
                 "name": "Retriever",
-                "title": f"检索完成 · {len(chunks_data['results'])} chunks · 覆盖度: {chunks_data.get('coverage_assessment', '?')}",
+                "title": f"检索完成 · {len(chunks_data['results'])} chunks · 覆盖度: {chunks_data.get('coverage_assessment', '?')} · {'真 OpenClaw' if retriever_real else 'mocks 兜底'}",
                 "text": "\n".join(
                     f"[{c['chunk_id']}] {c.get('source', {}).get('doc_name', '?')}"
                     for c in chunks_data["results"][:6]

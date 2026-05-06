@@ -102,13 +102,25 @@
 
 ### 前置依赖
 
-| 依赖 | 装法 |
-|------|------|
-| OpenClaw daemon | 已装（`openclaw doctor` 确认） |
-| Java 21 | `brew install openjdk@21` |
-| Node 20+ | `brew install node` |
-| Python 3.11+ | 系统已有 |
-| DeepSeek API key | 已在 `~/.openclaw/agents/main/agent/auth-profiles.json` |
+> **OS 兼容**：macOS / Linux 直接跑；Windows 需 WSL2（OpenClaw 官方要求，不是本项目限制）
+
+| 依赖 | macOS | Linux | Windows (WSL2) |
+|------|-------|-------|----------------|
+| OpenClaw daemon | `npm install -g openclaw && openclaw onboard --install-daemon` | 同左 | 同左（在 WSL 内） |
+| Java 21 | `brew install openjdk@21` | `apt install openjdk-21-jdk` | `apt install openjdk-21-jdk` (WSL) |
+| Node 20+ | `brew install node` | `nvm install 20` | `nvm install 20` (WSL) |
+| Python 3.11+ | 系统已有 | 系统已有 | WSL 系统已有 |
+| DeepSeek API key | 配在 `~/.openclaw/agents/main/agent/auth-profiles.json` | 同左 | 同左（WSL home） |
+
+### 首次部署（新机器 / 新装 OpenClaw）
+
+```bash
+# 一次配 reportclaw-coordinator 的 sessions_spawn 子 agent 白名单
+# 幂等，已配过会跳过；自动备份 ~/.openclaw/openclaw.json
+python3 scripts/setup_openclaw_subagents.py
+```
+
+未跑这一步的话，Coordinator 会被 OpenClaw 拒绝派发子 agent（错误：`agentId is not allowed for sessions_spawn (allowed: none)`），chat server 编排照样工作但 CLI 直连 native 多轮链路不可用。
 
 ### 启动（3 命令）
 
