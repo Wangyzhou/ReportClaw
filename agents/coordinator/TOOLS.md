@@ -26,14 +26,16 @@
 ```
 子 Agent 完成后自动 announce 结果回本 session，**不需要轮询**。
 
-**子 Agent ID 对照表：**
+**子 Agent ID 对照表（必须用全名，已在 openclaw.json allowAgents 白名单里）：**
 
 | 目标 | agentId |
 |------|---------|
-| 检索员 | `retriever` |
-| 写作员 | `writer` |
-| 改写员 | `rewriter` |
-| 审查员 | `reviewer` |
+| 检索员 | `reportclaw-retriever` |
+| 写作员 | `reportclaw-writer` |
+| 改写员 | `reportclaw-rewriter` |
+| 审查员 | `reportclaw-reviewer` |
+
+**铁律**：agentId **绝对不能**用短名（writer/retriever/reviewer/rewriter），会被 OpenClaw 权限网关拒绝并返回 `agentId is not allowed for sessions_spawn (allowed: ...)`。
 
 **注意**：
 - `task` 中必须包含完整的角色说明 + payload，因为子 Agent 只拿到 AGENTS.md + TOOLS.md，不继承本 session 的上下文

@@ -182,7 +182,7 @@ export function Composer({ onSend, disabled, documents = [], onMentionClick }: P
           onChange={handleChange}
           onKeyDown={handleKeyDown}
           onScroll={syncScroll}
-          placeholder="例如：帮我检索鹿晗关晓彤相关舆情"
+          placeholder="输入研究主题，AI 团队将检索 → 写作 → 审查（如：帮我写一份 A 股 AI 算力 Q1 流动性报告）"
           rows={3}
           disabled={disabled}
         />

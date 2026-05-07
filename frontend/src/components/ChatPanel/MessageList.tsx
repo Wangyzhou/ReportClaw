@@ -2,15 +2,16 @@ import styles from './ChatPanel.module.css'
 import { MessageBubble } from './MessageBubble'
 import { TaskProgress } from './TaskProgress'
 import { useAutoScroll } from '../../hooks/useAutoScroll'
-import type { ChatMessage, InlineActivity } from '../../types'
+import type { ChatMessage, InlineActivity, CauseChain } from '../../types'
 
 interface Props {
   messages: ChatMessage[]
   activities: InlineActivity[]
   onRefClick?: (chunkId: string) => void
+  causeChains?: Record<string, CauseChain>
 }
 
-export function MessageList({ messages, activities, onRefClick }: Props) {
+export function MessageList({ messages, activities, onRefClick, causeChains }: Props) {
   const { ref } = useAutoScroll<HTMLDivElement>([messages, activities])
 
   return (
@@ -29,7 +30,7 @@ export function MessageList({ messages, activities, onRefClick }: Props) {
 
         return (
           <div key={msg.id}>
-            <MessageBubble message={msg} onRefClick={onRefClick} />
+            <MessageBubble message={msg} onRefClick={onRefClick} causeChains={causeChains} />
             {activitiesBetween.map(act => (
               <TaskProgress key={act.key} activity={act} />
             ))}

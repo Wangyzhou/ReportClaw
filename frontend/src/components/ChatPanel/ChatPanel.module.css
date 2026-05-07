@@ -367,10 +367,26 @@
   cursor: pointer;
   text-decoration: underline;
   text-decoration-style: dotted;
+  padding: 1px 4px;
+  margin: 0 1px;
+  border-radius: 3px;
+  transition: background 0.15s;
 }
 
 .messageBubble :global(.md-ref:hover) {
   text-decoration-style: solid;
+  background: rgba(76, 227, 138, 0.12);
+}
+
+/* 已有 cause chain 数据的引用，显示绿色徽标 */
+.messageBubble :global(.md-ref.has-chain)::before {
+  content: '🔗 ';
+  font-size: 0.85em;
+}
+
+/* 缺数据的引用（前端没收到 cause_chain event）灰色降级 */
+.messageBubble :global(.md-ref.no-chain) {
+  color: var(--text-muted, #8b96a3);
 }
 
 .messageBubble :global(.md-ul),

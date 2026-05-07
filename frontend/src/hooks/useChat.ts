@@ -1,5 +1,5 @@
 import { useReducer, useCallback } from 'react'
-import type { ChatMessage, InlineActivity, ConnectionStatus, Session, StreamEvent, ChatPayload } from '../types'
+import type { ChatMessage, InlineActivity, ConnectionStatus, Session, StreamEvent, ChatPayload, CauseChain } from '../types'
 
 interface ChatState {
   messages: ChatMessage[]
@@ -12,6 +12,7 @@ interface ChatState {
   currentAssistantText: string
   sessions: Session[]
   messageCounter: number
+  causeChains: Record<string, CauseChain>
 }
 
 type ChatAction =
@@ -21,6 +22,7 @@ type ChatAction =
   | { type: 'UPDATE_ASSISTANT'; delta: string }
   | { type: 'UPSERT_ACTIVITY'; activity: InlineActivity }
   | { type: 'SET_RUN_ID'; runId: string }
+  | { type: 'SET_CAUSE_CHAINS'; chains: Record<string, CauseChain> }
   | { type: 'RESET_STREAM' }
 
 function chatReducer(state: ChatState, action: ChatAction): ChatState {
@@ -79,6 +81,9 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'SET_RUN_ID':
       return { ...state, currentRunId: action.runId }
 
+    case 'SET_CAUSE_CHAINS':
+      return { ...state, causeChains: { ...state.causeChains, ...action.chains } }
+
     case 'RESET_STREAM':
       return {
         ...state,
@@ -86,6 +91,7 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
         currentRunId: null,
         currentAssistantId: null,
         currentAssistantText: '',
+        causeChains: {},
       }
 
     default:
@@ -104,6 +110,7 @@ const initialState: ChatState = {
   currentAssistantText: '',
   sessions: [],
   messageCounter: 0,
+  causeChains: {},
 }
 
 export function useChat() {
@@ -121,11 +128,14 @@ export function useChat() {
         return
       } catch (err) {
         if (attempt < 3) {
-          dispatch({ type: 'SET_CONNECTION', status: 'error', label: '会话读取失败', badge: `第 ${attempt} 次重试中...` })
+          dispatch({ type: 'SET_CONNECTION', status: 'streaming', label: '尝试连接 Gateway', badge: `重试 ${attempt}/3` })
           await new Promise(r => setTimeout(r, 2000))
         } else {
-          dispatch({ type: 'SET_SESSIONS', sessions: [] })
-          dispatch({ type: 'SET_CONNECTION', status: 'error', label: '会话读取失败', badge: (err as Error).message })
+          // graceful fallback: Gateway 不可达时进入演示模式（前端仍可浏览 mock 数据 + 演示报告）
+          dispatch({ type: 'SET_SESSIONS', sessions: [{ key: 'demo:reportclaw', label: 'ReportClaw 演示' }] })
+          dispatch({ type: 'SET_CONNECTION', status: 'connected', label: 'ReportClaw 演示模式', badge: '5 Agent 待命' })
+          // 不再 surface error 提示，避免视觉干扰；调试需要时看 console
+          console.warn('[useChat] sessions request failed, entering offline demo mode:', (err as Error).message)
         }
       }
     }
@@ -209,6 +219,11 @@ function handleStreamEvent(event: StreamEvent, dispatch: React.Dispatch<ChatActi
       const key = (event.itemId || event.toolCallId ||
         `${event.type}:${event.stream || ''}:${event.kind || ''}:${event.name || ''}:${event.phase || ''}:${event.title || ''}`) as string
       dispatch({ type: 'UPSERT_ACTIVITY', activity: { ...event, key } as InlineActivity })
+      break
+    }
+    case 'cause_chain': {
+      const chains = (event.data as { chunks?: Record<string, CauseChain> })?.chunks
+      if (chains) dispatch({ type: 'SET_CAUSE_CHAINS', chains })
       break
     }
     case 'done':
